@@ -65,6 +65,14 @@ struct Motion {
     dpos[0] = std::round((old_vel[0] + vel[0])/2);
     dpos[1] = std::round((old_vel[1] + vel[1])/2);
   }
+
+  signed char dx() {
+    return dpos[0] * 5;
+  }
+
+  signed char dy() {
+    return -dpos[1] * 5;
+  }
 };
 
 Adafruit_MPU6050 mpu;
@@ -115,7 +123,7 @@ void loop() {
   Serial.println();
 
   if(bleMouse.isConnected()) {
-    bleMouse.move(motion.dpos[0], -motion.dpos[1], 0);
+    bleMouse.move(motion.dx(), motion.dy(), 0);
   }
 
   delay(10);
