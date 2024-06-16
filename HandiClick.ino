@@ -73,7 +73,6 @@ float ZERO_X;
 float ZERO_Y;
 float ZERO_Z;
 Motion motion;
-bool PLANE = true;
 
 void setup(void) {
   // Try to initialize Serial Port
@@ -107,21 +106,6 @@ void loop() {
   mpu.getEvent(&a, &g, &temp);
 
   motion.update(a.acceleration.x-ZERO_X, a.acceleration.y-ZERO_Y, a.acceleration.z-ZERO_Z);
-
-  /*
-  Serial.print("AccelX:");
-  Serial.print(motion.accel[0]);
-  Serial.print(",");
-  Serial.print("AccelY:");
-  Serial.print(motion.accel[1]);
-  Serial.print(",");
-  Serial.print("dposX:");
-  Serial.print(motion.dpos[0]);
-  Serial.print(",");
-  Serial.print("dposY:");
-  Serial.print(motion.dpos[1]);
-  Serial.println();
-  */
 
   Serial.print("velX:");
   Serial.print(motion.vel[0]);
