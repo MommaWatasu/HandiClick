@@ -5,12 +5,14 @@
 
 struct Motion {
   float accel[3];
+  int zero_count[2];
   float vel[3];
   signed int dpos[2];
   signed int zpos;
 
   Motion() {
     accel[0], accel[1], accel[2] = 0.0, 0.0, 0.0;
+    zero_count[0], zero_count[1] = 0, 0;
     vel[0], vel[1], vel[2] = 0.0, 0.0, 0.0;
     dpos[0], dpos[1] = 0, 0;
   }
@@ -19,13 +21,23 @@ struct Motion {
     // truncate the input if the input value is too small(noise)
     if (-0.05 < x && x < 0.05) {
       x = 0.0;
-      vel[0] = 0.0;
-      dpos[0] = 0;
+      if (zero_count[0] < 3) { zero_count[0] += 1; }
+      if (zero_count[0] == 3) {
+        vel[0] = 0.0;
+        dpos[0] = 0;
+      }
+    } else {
+      zero_count[0] = 0;
     }
     if (-0.05 < y && y < 0.05) {
       y = 0.0;
-      vel[1] = 0.0;
-      dpos[1] = 0;
+      if (zero_count[1] < 3) { zero_count[1] += 1; }
+      if (zero_count[1] == 3) {
+        vel[1] = 0.0;
+        dpos[1] = 0;
+      }
+    } else {
+      zero_count[1] = 0;
     }
     if (-0.05 < z && z < 0.05) {
       z = 0.0;
