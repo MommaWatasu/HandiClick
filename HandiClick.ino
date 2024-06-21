@@ -41,6 +41,11 @@ struct Motion {
     }
     if (-0.05 < z && z < 0.05) {
       z = 0.0;
+    } else {
+      accel[0], accel[1] = 0, 0;
+      vel[0], vel[1] = 0, 0;
+      dpos[0], dpos[1] = 0, 0;
+      return;
     }
 
     float old_vel[2] = {vel[0], vel[1]};
