@@ -7,7 +7,7 @@ struct Motion {
   float accel[3];
   int zero_count[2];
   float vel[3];
-  signed int dpos[2];
+  float dpos[2];
   signed int zpos;
 
   Motion() {
@@ -62,16 +62,16 @@ struct Motion {
     accel[2] = z;
 
     // updare position
-    dpos[0] = std::round((old_vel[0] + vel[0])/2);
-    dpos[1] = std::round((old_vel[1] + vel[1])/2);
+    dpos[0] = (old_vel[0] + vel[0])/2;
+    dpos[1] = (old_vel[1] + vel[1])/2;
   }
 
   signed char dx() {
-    return dpos[0] * 5;
+    return std::round(dpos[0] * 5);
   }
 
   signed char dy() {
-    return -dpos[1] * 5;
+    return -std::round(dpos[1] * 5);
   }
 };
 
