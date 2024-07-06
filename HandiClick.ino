@@ -1,4 +1,5 @@
 #include <BleMouse.h>
+#include <Ticker.h>
 #include<Wire.h>
 // I2C address of BMX055 acceleration sensor
 #define Addr_Accl 0x19  // (JP1,JP2,JP3 = Open)
@@ -187,14 +188,14 @@ struct BMX055 {
   }
 };
 
-struct Motion {
+struct Motion2D {
   int zero_count[3];
   float old_accel[3];
   float avg_accel[3];
   float vel[3];
   float dpos[2];
 
-  Motion() {
+  Motion2D() {
     zero_count[0], zero_count[1], zero_count[2] = 0, 0, 0;
     old_accel[0], old_accel[1], old_accel[2] = 0.0, 0.0, 0.0;
     avg_accel[0], avg_accel[1], avg_accel[2] = 0.0, 0.0, 0.0;
@@ -277,11 +278,23 @@ struct Motion {
 };
 
 BMX055 bmx;
-Motion motion;
+Motion2D motion;
 BleMouse bleMouse("HandiClick", "GateHorse", 100);
+Ticker MouseTicker;
 
-float xVel = 0.00;
-float yVel = 0.00;
+void mouse2d() {
+  signed char dx, dy;
+  bmx.update_accel();
+  motion.update_velocity(bmx.accel);
+
+  if(bleMouse.isConnected()) {
+    dx = motion.dx();
+    dy = motion.dy();
+    if (dx != 0 || dy != 0) {
+      bleMouse.move(dx, dy, 0);
+    }
+  }
+}
 
 void setup()
 {
@@ -296,40 +309,10 @@ void setup()
   // Initialize BMX055
   bmx.init();
   delay(300);
+
+  MouseTicker.attach_ms(1, mouse2d);
 }
 
 void loop()
 {
-  signed char dx, dy;
-
-  //BMX055 read acceleration
-  bmx.update_accel();
-  motion.update_velocity(bmx.accel);
-  if (motion.vel[0] != 0 || motion.vel[1] != 0) {
-    Serial.print("AcclX:");
-    Serial.print(bmx.accel[0]);
-    Serial.print(",");
-    Serial.print("AccelY:");
-    Serial.print(bmx.accel[1]);
-    Serial.print(",");
-    Serial.print("AccelZ:");
-    Serial.print(bmx.accel[2]);
-    Serial.print(",");
-    Serial.print("VelX:");
-    Serial.print(motion.vel[0]);
-    Serial.print(",");
-    Serial.print("VelY:");
-    Serial.print(motion.vel[1]);
-    Serial.println("");
-  }
-
-  if(bleMouse.isConnected()) {
-    dx = motion.dx();
-    dy = motion.dy();
-    if (dx != 0 || dy != 0) {
-      bleMouse.move(dx, dy, 0);
-    }
-  }
-
-  delay(2);
 }
