@@ -1,6 +1,8 @@
 #include <BleMouse.h>
+#include<MadgwickAHRS.h>
 #include <Ticker.h>
 #include<Wire.h>
+
 // I2C address of BMX055 acceleration sensor
 #define Addr_Accl 0x19  // (JP1,JP2,JP3 = Open)
 // I2C address of BMX055 gyro sensor
@@ -8,16 +10,17 @@
 // I2C address of BMX055 magnetic sensor
 #define Addr_Mag 0x13   // (JP1,JP2,JP3 = Open)
 
+//
+#define GPIO_PIN1 7
+
 struct BMX055 {
   // unite: m/s^2
   float accel[3];
-  float accel_zero[3];
   float gyro[3];
   float mag[3];
 
   BMX055() {
     accel[0], accel[1], accel[2] = 0.00, 0.00, 0.00;
-    accel_zero[0], accel_zero[1], accel_zero[2] = 0.00, 0.00, 0.00;
     gyro[0], gyro[1], gyro[2] = 0.00, 0.00, 0.00;
     gyro[0], gyro[1], gyro[2] = 0.00, 0.00, 0.00;
   }
@@ -93,7 +96,6 @@ struct BMX055 {
     Wire.endTransmission();
   //------------------------------------------------------------//
     delay(100);
-    calibration();
   }
 
   void update_accel() {
@@ -115,9 +117,9 @@ struct BMX055 {
     if (accel[1] > 2047)  accel[1] -= 4096;
     accel[2] = ((data[5] * 256) + (data[4] & 0xF0)) / 16;
     if (accel[2] > 2047)  accel[2] -= 4096;
-    accel[0] = accel[0] * 0.0098 - accel_zero[0]; // range = +/-2g
-    accel[1] = accel[1] * 0.0098 - accel_zero[1]; // range = +/-2g
-    accel[2] = accel[2] * 0.0098 - accel_zero[2]; // range = +/-2g
+    accel[0] = accel[0] * 0.0098; // range = +/-2g
+    accel[1] = accel[1] * 0.0098; // range = +/-2g
+    accel[2] = accel[2] * 0.0098; // range = +/-2g
   }
 
   void update_gyro() {
@@ -172,7 +174,7 @@ struct BMX055 {
     update_mag();
   }
 
-  void calibration() {
+  float* calibration() {
     // number of sample
     int n = 10;
     float sum[3];
@@ -182,11 +184,15 @@ struct BMX055 {
       sum[1] += accel[1];
       sum[2] += accel[2];
     }
-    accel_zero[0] = sum[0] / n;
-    accel_zero[1] = sum[1] / n;
-    accel_zero[2] = sum[2] / n;
+    sum[0] = sum[0] / n;
+    sum[1] = sum[1] / n;
+    sum[2] = sum[2] / n;
+    return sum;
   }
 };
+
+// Global variable to access BMX055 sensor;
+BMX055 bmx;
 
 struct Motion2D {
   int zero_count[3];
@@ -277,22 +283,93 @@ struct Motion2D {
   }
 };
 
-BMX055 bmx;
-Motion2D motion;
+struct Motion3D {
+  Madgwick filter;
+  float pitch;
+  float roll;
+  float yaw;
+  float default_posture[3];
+
+  Motion3D() {
+    filter.begin(30);
+    pitch = 0.0;
+    roll = 0.0;
+    yaw = 0.0;
+  }
+
+  void init() {
+    bmx.update();
+    update_madgewick(bmx.accel, bmx.gyro, bmx.mag);
+    default_posture[0], default_posture[1], default_posture[2] = pitch, roll, yaw;
+  }
+
+  void update_madgewick(float accel[3], float gyro[3], float mag[3]) {
+    filter.update(
+      gyro[0], gyro[1], gyro[2],
+      accel[0], accel[1], accel[2],
+      mag[0], mag[1], mag[2]);
+
+    pitch = filter.getPitch();
+    roll = filter.getRoll();
+    yaw = filter.getYaw();
+  }
+
+  float convert_range(float x) {
+    if (x > -10 && x < 10) {
+      return 0.0;
+    } else if (x > 0) {
+      return (x - 10) / 10;
+    } else {
+      return (x + 10) / 10;
+    }
+  }
+
+  signed char dx() {
+    return std::round(convert_range(pitch));
+  }
+
+  signed char dy() {
+    return std::round(convert_range(roll));
+  }
+};
+
+Motion2D motion2d;
+Motion3D motion3d;
 BleMouse bleMouse("HandiClick", "GateHorse", 100);
 Ticker MouseTicker;
 
+// now calibration isn't executed. Add processing into the function which is called when the button is pushed.
 void mouse2d() {
   signed char dx, dy;
   bmx.update_accel();
-  motion.update_velocity(bmx.accel);
+  motion2d.update_velocity(bmx.accel);
 
   if(bleMouse.isConnected()) {
-    dx = motion.dx();
-    dy = motion.dy();
+    dx = motion2d.dx();
+    dy = motion2d.dy();
     if (dx != 0 || dy != 0) {
       bleMouse.move(dx, dy, 0);
     }
+  }
+}
+
+void mouse3d() {
+  signed char dx, dy;
+  bmx.update();
+  motion3d.update_madgewick(bmx.accel, bmx.gyro, bmx.mag);
+
+  if (bleMouse.isConnected()) {
+    dx = motion3d.dx();
+    dy = motion3d.dy();
+    if (dx != 0 || dy != 0) {
+      bleMouse.move(dx, dy, 0);
+    }
+  }
+}
+
+void left_click() {
+  if (bleMouse.isConnected()) {
+    bleMouse.click();
   }
 }
 
@@ -310,7 +387,9 @@ void setup()
   bmx.init();
   delay(300);
 
-  MouseTicker.attach_ms(1, mouse2d);
+  MouseTicker.attach_ms(1, mouse3d);
+  // set the interruption handler for right click.
+  // attachInterrupt(GPIO_PIN1, left_click, FALLING);
 }
 
 void loop()
