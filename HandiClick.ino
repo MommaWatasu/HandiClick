@@ -11,7 +11,7 @@
 #define Addr_Mag 0x13   // (JP1,JP2,JP3 = Open)
 
 //
-#define GPIO_PIN1 7
+#define GPIO_PIN1 2
 
 struct BMX055 {
   // unite: m/s^2
@@ -387,9 +387,11 @@ void setup()
   bmx.init();
   delay(300);
 
-  MouseTicker.attach_ms(1, mouse3d);
+  motion2d.init();
+  motion3d.init(motion2d.default_accel[2]);
+  MouseTicker.attach_ms(1, mouse2d);
   // set the interruption handler for right click.
-  // attachInterrupt(GPIO_PIN1, left_click, FALLING);
+  attachInterrupt(GPIO_PIN1, left_click, FALLING);
 }
 
 void loop()
