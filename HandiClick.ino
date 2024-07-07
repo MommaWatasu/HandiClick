@@ -1,7 +1,8 @@
+#include <array>
 #include <BleMouse.h>
-#include<MadgwickAHRS.h>
+#include <MadgwickAHRS.h>
 #include <Ticker.h>
-#include<Wire.h>
+#include <Wire.h>
 
 // I2C address of BMX055 acceleration sensor
 #define Addr_Accl 0x19  // (JP1,JP2,JP3 = Open)
@@ -174,10 +175,10 @@ struct BMX055 {
     update_mag();
   }
 
-  float* calibration() {
+  std::array<float, 3> calibration() {
     // number of sample
     int n = 10;
-    float sum[3];
+    std::array<float, 3> sum = {0.0, 0.0, 0.0};
     for (int i = 0; i < n; i++) {
       update_accel();
       sum[0] += accel[0];
@@ -196,20 +197,34 @@ BMX055 bmx;
 
 struct Motion2D {
   int zero_count[3];
+  int tilt_count;
   float old_accel[3];
   float avg_accel[3];
+  float default_accel[3];
   float vel[3];
   float dpos[2];
 
   Motion2D() {
     zero_count[0], zero_count[1], zero_count[2] = 0, 0, 0;
+    tilt_count = 0;
     old_accel[0], old_accel[1], old_accel[2] = 0.0, 0.0, 0.0;
     avg_accel[0], avg_accel[1], avg_accel[2] = 0.0, 0.0, 0.0;
     vel[0], vel[1], vel[2] = 0.0, 0.0, 0.0;
     dpos[0], dpos[1] = 0.0, 0.0;
   }
 
+  void init() {
+    std::array<float, 3> result = bmx.calibration();
+    for(int i = 0; i < 3; i++) {
+        default_accel[i] = result[i];
+    }
+  }
+
   void update_velocity(float accel[3]) {
+    accel[0] = accel[0] - default_accel[0];
+    accel[1] = accel[1] - default_accel[1];
+    accel[2] = accel[2] - default_accel[2];
+
     avg_accel[0] = (avg_accel[0] + accel[0]) / 2;
     avg_accel[1] = (avg_accel[1] + accel[1]) / 2;
     avg_accel[2] = (avg_accel[2] + accel[2]) / 2;
@@ -265,26 +280,34 @@ struct Motion2D {
     dpos[0] = (old_vel[0] + vel[0])/2;
     dpos[1] = (old_vel[1] + vel[1])/2;
   }
-  
-  signed char dx() {
-    if (abs(avg_accel[2]) <= 0.08) {
-      return std::round(vel[0]);
+
+  bool check_mode() {
+    if (abs(avg_accel[2]) > 0.1) {
+      tilt_count += 1;
+      if (tilt_count > 10) {
+        tilt_count = 0;
+        return false;
+      }
     } else {
-      return 0;
+      tilt_count = 0;
     }
+    return true;
+  }
+
+  signed char dx() {
+    return std::round(vel[0]);
   }
 
   signed char dy() {
-    if (abs(avg_accel[2]) <= 0.08) {
-      return -std::round(dpos[1]);
-    } else {
-      return 0;
-    }
+    return -std::round(dpos[1]);
   }
 };
 
 struct Motion3D {
   Madgwick filter;
+  float default_z_accel;
+  float avg_z_accel;
+  int zero_count;
   float pitch;
   float roll;
   float yaw;
@@ -292,18 +315,24 @@ struct Motion3D {
 
   Motion3D() {
     filter.begin(30);
+    avg_z_accel = 0.0;
+    zero_count = 0;
     pitch = 0.0;
     roll = 0.0;
     yaw = 0.0;
   }
 
-  void init() {
+  void init(float z_accel) {
     bmx.update();
     update_madgewick(bmx.accel, bmx.gyro, bmx.mag);
+    default_z_accel = z_accel;
+    avg_z_accel = bmx.accel[2];
     default_posture[0], default_posture[1], default_posture[2] = pitch, roll, yaw;
   }
 
   void update_madgewick(float accel[3], float gyro[3], float mag[3]) {
+    avg_z_accel = (avg_z_accel + accel[2]) / 2;
+
     filter.update(
       gyro[0], gyro[1], gyro[2],
       accel[0], accel[1], accel[2],
@@ -312,6 +341,19 @@ struct Motion3D {
     pitch = filter.getPitch();
     roll = filter.getRoll();
     yaw = filter.getYaw();
+  }
+
+  bool check_mode() {
+    if (abs(avg_z_accel - default_z_accel) <= 0.1) {
+      zero_count += 1;
+      if (zero_count > 5) {
+        zero_count = 0;
+        return false;
+      }
+    } else {
+      zero_count = 0;
+    }
+    return true;
   }
 
   float convert_range(float x) {
@@ -325,11 +367,25 @@ struct Motion3D {
   }
 
   signed char dx() {
-    return std::round(convert_range(pitch));
+    signed char dx = std::round(convert_range(pitch));
+    if (dx > 6) {
+      return 6;
+    } else if (dx < -6) {
+      return -6;
+    } else {
+      return dx;
+    }
   }
 
   signed char dy() {
-    return std::round(convert_range(roll));
+    signed char dy = std::round(convert_range(roll));
+    if (dy > 6) {
+      return 6;
+    } else if (dy < -6) {
+      return -6;
+    } else {
+      return dy;
+    }
   }
 };
 
@@ -340,29 +396,51 @@ Ticker MouseTicker;
 
 // now calibration isn't executed. Add processing into the function which is called when the button is pushed.
 void mouse2d() {
+  Serial.println("2D");
   signed char dx, dy;
+  bool mode = true;
+
   bmx.update_accel();
   motion2d.update_velocity(bmx.accel);
+
+  mode = motion2d.check_mode();
+  if (!mode) {
+    MouseTicker.detach();
+    delay(10);
+    MouseTicker.attach_ms(33, mouse3d);
+    return;
+  }
 
   if(bleMouse.isConnected()) {
     dx = motion2d.dx();
     dy = motion2d.dy();
     if (dx != 0 || dy != 0) {
-      bleMouse.move(dx, dy, 0);
+      bleMouse.move(dx/2, dy/2, 0);
     }
   }
 }
 
 void mouse3d() {
+  Serial.println("3D");
   signed char dx, dy;
+  bool mode;
+
   bmx.update();
   motion3d.update_madgewick(bmx.accel, bmx.gyro, bmx.mag);
+
+  mode = motion3d.check_mode();
+  if (!mode) {
+    MouseTicker.detach();
+    delay(10);
+    MouseTicker.attach_ms(1, mouse2d);
+    return;
+  }
 
   if (bleMouse.isConnected()) {
     dx = motion3d.dx();
     dy = motion3d.dy();
     if (dx != 0 || dy != 0) {
-      bleMouse.move(dx, dy, 0);
+      bleMouse.move(dx*3, dy*3, 0);
     }
   }
 }
