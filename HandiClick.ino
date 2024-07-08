@@ -396,7 +396,6 @@ Ticker MouseTicker;
 
 // now calibration isn't executed. Add processing into the function which is called when the button is pushed.
 void mouse2d() {
-  Serial.println("2D");
   signed char dx, dy;
   bool mode = true;
 
@@ -415,13 +414,12 @@ void mouse2d() {
     dx = motion2d.dx();
     dy = motion2d.dy();
     if (dx != 0 || dy != 0) {
-      bleMouse.move(dx/2, dy/2, 0);
+      bleMouse.move(dx, dy, 0);
     }
   }
 }
 
 void mouse3d() {
-  Serial.println("3D");
   signed char dx, dy;
   bool mode;
 
@@ -440,7 +438,7 @@ void mouse3d() {
     dx = motion3d.dx();
     dy = motion3d.dy();
     if (dx != 0 || dy != 0) {
-      bleMouse.move(dx*3, dy*3, 0);
+      bleMouse.move(dx*5, dy*5, 0);
     }
   }
 }
