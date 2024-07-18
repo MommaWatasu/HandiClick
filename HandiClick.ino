@@ -12,7 +12,7 @@
 #define Addr_Mag 0x13   // (JP1,JP2,JP3 = Open)
 
 //
-#define GPIO_PIN1 2
+#define GPIO_PIN1 19
 
 struct BMX055 {
   // unite: m/s^2
@@ -447,6 +447,7 @@ void left_click() {
   if (bleMouse.isConnected()) {
     bleMouse.click();
   }
+  delay(5);
 }
 
 void setup()
@@ -467,7 +468,8 @@ void setup()
   motion3d.init(motion2d.default_accel[2]);
   MouseTicker.attach_ms(1, mouse2d);
   // set the interruption handler for right click.
-  attachInterrupt(GPIO_PIN1, left_click, FALLING);
+  pinMode(GPIO_PIN1, INPUT_PULLUP);
+  attachInterrupt(GPIO_PIN1, left_click, RISING);
 }
 
 void loop()
