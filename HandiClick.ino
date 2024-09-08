@@ -1,3 +1,5 @@
+#include "esp_pm.h"
+
 #include <array>
 #include <BleMouse.h>
 #include <MadgwickAHRS.h>
@@ -11,8 +13,19 @@
 // I2C address of BMX055 magnetic sensor
 #define Addr_Mag 0x13   // (JP1,JP2,JP3 = Open)
 
-//
-#define GPIO_PIN1 19
+// Left Click
+#define GPIO_PIN_LEFT 32
+// Right Click
+#define GPIO_PIN_RIGHT 19
+// Rotary Encoder 1
+#define GPIO_PIN_ROTARY_A 5
+// Rotary Encoder 2
+#define GPIO_PIN1_ROTARY_B 18
+
+hw_timer_t * timer_left = NULL;
+hw_timer_t * timer_right = NULL;
+// time in ms to trigger the watchdog
+const int wdtTimeout = 10;
 
 struct BMX055 {
   // unite: m/s^2
@@ -295,11 +308,11 @@ struct Motion2D {
   }
 
   signed char dx() {
-    return std::round(vel[0]);
+    return -std::round(vel[0]);
   }
 
   signed char dy() {
-    return -std::round(dpos[1]);
+    return std::round(dpos[1]);
   }
 };
 
@@ -367,7 +380,7 @@ struct Motion3D {
   }
 
   signed char dx() {
-    signed char dx = std::round(convert_range(pitch));
+    signed char dx = -std::round(convert_range(pitch));
     if (dx > 6) {
       return 6;
     } else if (dx < -6) {
@@ -378,7 +391,7 @@ struct Motion3D {
   }
 
   signed char dy() {
-    signed char dy = std::round(convert_range(roll));
+    signed char dy = -std::round(convert_range(roll));
     if (dy > 6) {
       return 6;
     } else if (dy < -6) {
@@ -445,9 +458,70 @@ void mouse3d() {
 
 void left_click() {
   if (bleMouse.isConnected()) {
-    bleMouse.click();
+    bleMouse.click(MOUSE_LEFT);
   }
-  delay(5);
+  detachInterrupt(GPIO_PIN_LEFT);
+  timerWrite(timer_left, 0);
+  timerStart(timer_left);
+}
+
+void right_click() {
+  if (bleMouse.isConnected()) {
+    bleMouse.click(MOUSE_RIGHT);
+  }
+  detachInterrupt(GPIO_PIN_RIGHT);
+  timerWrite(timer_right, 0);
+  timerStart(timer_right);
+}
+
+void left_click_rm() {
+  if (bleMouse.isConnected()) {
+    bleMouse.release(MOUSE_LEFT);
+  }
+  detachInterrupt(GPIO_PIN_LEFT);
+  timerWrite(timer_left, 0);
+  timerStart(timer_left);
+}
+
+void right_click_rm() {
+  if (bleMouse.isConnected()) {
+    bleMouse.release(MOUSE_RIGHT);
+  }
+  detachInterrupt(GPIO_PIN_RIGHT);
+  timerWrite(timer_right, 0);
+  timerStart(timer_right);
+}
+
+void enable_left_click() {
+  if (digitalRead(GPIO_PIN_LEFT) == HIGH) {
+    attachInterrupt(GPIO_PIN_LEFT, left_click_rm, FALLING);
+    if (bleMouse.isConnected()) {
+      bleMouse.press(MOUSE_LEFT);
+    }
+  } else {
+    attachInterrupt(GPIO_PIN_LEFT, left_click, RISING);
+  }
+  timerStop(timer_left);
+}
+
+void enable_right_click() {
+  if (digitalRead(GPIO_PIN_RIGHT) == HIGH) {
+    attachInterrupt(GPIO_PIN_RIGHT, right_click_rm, FALLING);
+    if (bleMouse.isConnected()) {
+      bleMouse.press(MOUSE_RIGHT);
+    }
+  } else {
+    attachInterrupt(GPIO_PIN_RIGHT, right_click, RISING);
+  }
+  timerStop(timer_right);
+}
+
+// set the interruption handler for left and right click
+void initialize_clicks() {
+  pinMode(GPIO_PIN_LEFT, INPUT_PULLUP);
+  attachInterrupt(GPIO_PIN_LEFT, left_click, RISING);
+  pinMode(GPIO_PIN_RIGHT, INPUT_PULLUP);
+  attachInterrupt(GPIO_PIN_RIGHT, right_click, RISING);
 }
 
 void setup()
@@ -456,6 +530,16 @@ void setup()
   Wire.begin();
   // Serial communication using 115200bps
   Serial.begin(115200);
+
+  // configure timers to prevent chattering
+  timer_left = timerBegin(1000000);
+  timer_right = timerBegin(1000000);
+  timerStop(timer_left);
+  timerStop(timer_right);
+  timerAttachInterrupt(timer_left, &enable_left_click);
+  timerAttachInterrupt(timer_right, &enable_right_click);
+  timerAlarm(timer_left, wdtTimeout * 1000, false, 0);
+  timerAlarm(timer_right, wdtTimeout * 1000, false, 0);
 
   // Initialize BLE Mouse
   bleMouse.begin();
@@ -467,9 +551,10 @@ void setup()
   motion2d.init();
   motion3d.init(motion2d.default_accel[2]);
   MouseTicker.attach_ms(1, mouse2d);
-  // set the interruption handler for right click.
-  pinMode(GPIO_PIN1, INPUT_PULLUP);
-  attachInterrupt(GPIO_PIN1, left_click, RISING);
+
+  Serial.println("End of the initialize");
+
+  initialize_clicks();
 }
 
 void loop()
