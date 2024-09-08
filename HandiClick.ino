@@ -1,8 +1,7 @@
-#include "esp_pm.h"
-
 #include <array>
 #include <BleMouse.h>
 #include <MadgwickAHRS.h>
+#include <RotaryEncoder.h>
 #include <Ticker.h>
 #include <Wire.h>
 
@@ -20,10 +19,11 @@
 // Rotary Encoder 1
 #define GPIO_PIN_ROTARY_A 5
 // Rotary Encoder 2
-#define GPIO_PIN1_ROTARY_B 18
+#define GPIO_PIN_ROTARY_B 18
 
 hw_timer_t * timer_left = NULL;
 hw_timer_t * timer_right = NULL;
+hw_timer_t * timer_wheel = NULL;
 // time in ms to trigger the watchdog
 const int wdtTimeout = 10;
 
@@ -404,6 +404,8 @@ struct Motion3D {
 
 Motion2D motion2d;
 Motion3D motion3d;
+RotaryEncoder encoder(GPIO_PIN_ROTARY_A, GPIO_PIN_ROTARY_B, RotaryEncoder::LatchMode::TWO03);
+int pos = 0;
 BleMouse bleMouse("HandiClick", "GateHorse", 100);
 Ticker MouseTicker;
 
@@ -524,6 +526,34 @@ void initialize_clicks() {
   attachInterrupt(GPIO_PIN_RIGHT, right_click, RISING);
 }
 
+/*
+// Here is the implementation for Wheel
+*/
+void update_wheel() {
+  encoder.tick();
+
+  int new_pos = encoder.getPosition();
+  if (pos != new_pos) {
+    if (bleMouse.isConnected()) {
+      bleMouse.move(0, 0, char(encoder.getDirection()) * 4);
+    }
+    pos = new_pos;
+  }
+  detachInterrupt(GPIO_PIN_ROTARY_A);
+  timerWrite(timer_wheel, 0);
+  timerStart(timer_wheel);
+}
+
+void enable_wheel() {
+  attachInterrupt(GPIO_PIN_ROTARY_A, update_wheel, CHANGE);
+  timerStop(timer_wheel);
+}
+
+void initialize_wheel() {
+  attachInterrupt(GPIO_PIN_ROTARY_A, update_wheel, CHANGE);
+  attachInterrupt(GPIO_PIN_ROTARY_B, update_wheel, CHANGE);
+}
+
 void setup()
 {
   // Initialize Wire(ESP32-I2C)
@@ -534,12 +564,16 @@ void setup()
   // configure timers to prevent chattering
   timer_left = timerBegin(1000000);
   timer_right = timerBegin(1000000);
+  timer_wheel = timerBegin(1000000);
   timerStop(timer_left);
   timerStop(timer_right);
+  timerStop(timer_wheel);
   timerAttachInterrupt(timer_left, &enable_left_click);
   timerAttachInterrupt(timer_right, &enable_right_click);
+  timerAttachInterrupt(timer_wheel, &enable_wheel);
   timerAlarm(timer_left, wdtTimeout * 1000, false, 0);
   timerAlarm(timer_right, wdtTimeout * 1000, false, 0);
+  timerAlarm(timer_wheel, wdtTimeout * 1000, false, 0);
 
   // Initialize BLE Mouse
   bleMouse.begin();
@@ -555,6 +589,7 @@ void setup()
   Serial.println("End of the initialize");
 
   initialize_clicks();
+  initialize_wheel();
 }
 
 void loop()
