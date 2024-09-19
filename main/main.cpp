@@ -4,6 +4,7 @@
 #include <RotaryEncoder.h>
 #include <Ticker.h>
 #include <Wire.h>
+#include <utils.h>
 
 // I2C address of BMX055 acceleration sensor
 #define Addr_Accl 0x19  // (JP1,JP2,JP3 = Open)
@@ -21,22 +22,24 @@
 // Rotary Encoder 2
 #define GPIO_PIN_ROTARY_B 18
 
-hw_timer_t * timer_left = NULL;
-hw_timer_t * timer_right = NULL;
-hw_timer_t * timer_wheel = NULL;
+esp_timer_handle_t *timer_left = NULL;
+esp_timer_handle_t *timer_right = NULL;
+esp_timer_handle_t *timer_wheel = NULL;
 // time in ms to trigger the watchdog
 const int wdtTimeout = 10;
 
+TwoWire Wire = TwoWire();
+
 struct BMX055 {
   // unite: m/s^2
-  float accel[3];
-  float gyro[3];
-  float mag[3];
+  std::array<float, 3> accel;
+  std::array<float, 3> gyro;
+  std::array<float, 3> mag;
 
   BMX055() {
-    accel[0], accel[1], accel[2] = 0.00, 0.00, 0.00;
-    gyro[0], gyro[1], gyro[2] = 0.00, 0.00, 0.00;
-    gyro[0], gyro[1], gyro[2] = 0.00, 0.00, 0.00;
+    accel.fill(0);
+    gyro.fill(0);
+    mag.fill(0);
   }
 
   void init() {
@@ -45,49 +48,49 @@ struct BMX055 {
     Wire.write(0x0F); // Select PMU_Range register
     Wire.write(0x03);   // Range = +/- 2g
     Wire.endTransmission();
-    delay(100);
+    delay(100); // 100ms
   //------------------------------------------------------------//
     Wire.beginTransmission(Addr_Accl);
     Wire.write(0x10);  // Select PMU_BW register
     Wire.write(0x0F);  // Bandwidth = 1000 Hz
     Wire.endTransmission();
-    delay(100);
+    delay(100); // 100ms
   //------------------------------------------------------------//
     Wire.beginTransmission(Addr_Accl);
     Wire.write(0x11);  // Select PMU_LPW register
     Wire.write(0x00);  // Normal mode, Sleep duration = 0.5ms
     Wire.endTransmission();
-    delay(100);
+    delay(100); // 100ms
   //------------------------------------------------------------//
     Wire.beginTransmission(Addr_Gyro);
     Wire.write(0x0F);  // Select Range register
     Wire.write(0x04);  // Full scale = +/- 125 degree/s
     Wire.endTransmission();
-    delay(100);
+    delay(100); // 100ms
   //------------------------------------------------------------//
     Wire.beginTransmission(Addr_Gyro);
     Wire.write(0x10);  // Select Bandwidth register
     Wire.write(0x07);  // ODR = 100 Hz
     Wire.endTransmission();
-    delay(100);
+    delay(100); // 100ms
   //------------------------------------------------------------//
     Wire.beginTransmission(Addr_Gyro);
     Wire.write(0x11);  // Select LPM1 register
     Wire.write(0x00);  // Normal mode, Sleep duration = 2ms
     Wire.endTransmission();
-    delay(100);
+    delay(100); // 100ms
   //------------------------------------------------------------//
     Wire.beginTransmission(Addr_Mag);
     Wire.write(0x4B);  // Select Mag register
     Wire.write(0x83);  // Soft reset
     Wire.endTransmission();
-    delay(100);
+    delay(100); // 100ms
   //------------------------------------------------------------//
     Wire.beginTransmission(Addr_Mag);
     Wire.write(0x4B);  // Select Mag register
     Wire.write(0x01);  // Soft reset
     Wire.endTransmission();
-    delay(100);
+    delay(100); // 100ms
   //------------------------------------------------------------//
     Wire.beginTransmission(Addr_Mag);
     Wire.write(0x4C);  // Select Mag register
@@ -109,7 +112,7 @@ struct BMX055 {
     Wire.write(16);  // No. of Repetitions for Z-Axis = 15
     Wire.endTransmission();
   //------------------------------------------------------------//
-    delay(100);
+    delay(100); // 100ms
   }
 
   void update_accel() {
@@ -209,21 +212,21 @@ struct BMX055 {
 BMX055 bmx;
 
 struct Motion2D {
-  int zero_count[3];
+  std::array<int, 3> zero_count;
   int tilt_count;
-  float old_accel[3];
-  float avg_accel[3];
-  float default_accel[3];
-  float vel[3];
-  float dpos[2];
+  std::array<float, 3> old_accel;
+  std::array<float, 3> avg_accel;
+  std::array<float, 3> default_accel;
+  std::array<float, 3> vel;
+  std::array<float, 2> dpos;
 
   Motion2D() {
-    zero_count[0], zero_count[1], zero_count[2] = 0, 0, 0;
+    zero_count.fill(0);
     tilt_count = 0;
-    old_accel[0], old_accel[1], old_accel[2] = 0.0, 0.0, 0.0;
-    avg_accel[0], avg_accel[1], avg_accel[2] = 0.0, 0.0, 0.0;
-    vel[0], vel[1], vel[2] = 0.0, 0.0, 0.0;
-    dpos[0], dpos[1] = 0.0, 0.0;
+    old_accel.fill(0);
+    avg_accel.fill(0);
+    vel.fill(0);
+    dpos.fill(0);
   }
 
   void init() {
@@ -337,10 +340,12 @@ struct Motion3D {
 
   void init(float z_accel) {
     bmx.update();
-    update_madgewick(bmx.accel, bmx.gyro, bmx.mag);
+    update_madgewick(bmx.accel.data(), bmx.gyro.data(), bmx.mag.data());
     default_z_accel = z_accel;
     avg_z_accel = bmx.accel[2];
-    default_posture[0], default_posture[1], default_posture[2] = pitch, roll, yaw;
+    default_posture[0] = pitch;
+    default_posture[1] = roll;
+    default_posture[2] = yaw;
   }
 
   void update_madgewick(float accel[3], float gyro[3], float mag[3]) {
@@ -415,12 +420,12 @@ void mouse2d() {
   bool mode = true;
 
   bmx.update_accel();
-  motion2d.update_velocity(bmx.accel);
+  motion2d.update_velocity(bmx.accel.data());
 
   mode = motion2d.check_mode();
   if (!mode) {
     MouseTicker.detach();
-    delay(10);
+    delay(10); // 10ms
     MouseTicker.attach_ms(33, mouse3d);
     return;
   }
@@ -439,12 +444,12 @@ void mouse3d() {
   bool mode;
 
   bmx.update();
-  motion3d.update_madgewick(bmx.accel, bmx.gyro, bmx.mag);
+  motion3d.update_madgewick(bmx.accel.data(), bmx.gyro.data(), bmx.mag.data());
 
   mode = motion3d.check_mode();
   if (!mode) {
     MouseTicker.detach();
-    delay(10);
+    delay(10); // 10ms
     MouseTicker.attach_ms(1, mouse2d);
     return;
   }
@@ -580,13 +585,13 @@ void setup()
 
   // Initialize BMX055
   bmx.init();
-  delay(300);
+  delay(300); // 300ms
 
   motion2d.init();
   motion3d.init(motion2d.default_accel[2]);
   MouseTicker.attach_ms(1, mouse2d);
 
-  Serial.println("End of the initialize");
+  Serial.println("End of the initialization");
 
   initialize_clicks();
   initialize_wheel();
