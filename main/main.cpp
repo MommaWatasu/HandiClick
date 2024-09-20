@@ -4,7 +4,6 @@
 #include <RotaryEncoder.h>
 #include <Ticker.h>
 #include <Wire.h>
-#include <utils.h>
 
 // I2C address of BMX055 acceleration sensor
 #define Addr_Accl 0x19  // (JP1,JP2,JP3 = Open)
@@ -22,9 +21,9 @@
 // Rotary Encoder 2
 #define GPIO_PIN_ROTARY_B 18
 
-esp_timer_handle_t *timer_left = NULL;
-esp_timer_handle_t *timer_right = NULL;
-esp_timer_handle_t *timer_wheel = NULL;
+hw_timer_t *timer_left = NULL;
+hw_timer_t *timer_right = NULL;
+hw_timer_t *timer_wheel = NULL;
 // time in ms to trigger the watchdog
 const int wdtTimeout = 10;
 

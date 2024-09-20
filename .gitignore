@@ -1,3 +1,6 @@
 build
 sdkconfig.old
 sdkconfig.ci
+components
+managed_components
+dependencies.lock
