@@ -18,6 +18,8 @@
 #ifndef RotaryEncoder_h
 #define RotaryEncoder_h
 
+#include <cstdint>
+
 class RotaryEncoder
 {
 public:

@@ -1,4 +1,5 @@
 #include <array>
+#include <Arduino.h>
 #include <BleMouse.h>
 #include <MadgwickAHRS.h>
 #include <RotaryEncoder.h>
@@ -26,8 +27,6 @@ hw_timer_t *timer_right = NULL;
 hw_timer_t *timer_wheel = NULL;
 // time in ms to trigger the watchdog
 const int wdtTimeout = 10;
-
-TwoWire Wire = TwoWire();
 
 struct BMX055 {
   // unite: m/s^2
@@ -413,7 +412,8 @@ int pos = 0;
 BleMouse bleMouse("HandiClick", "GateHorse", 100);
 Ticker MouseTicker;
 
-// now calibration isn't executed. Add processing into the function which is called when the button is pushed.
+void mouse3d();
+
 void mouse2d() {
   signed char dx, dy;
   bool mode = true;
@@ -558,8 +558,10 @@ void initialize_wheel() {
   attachInterrupt(GPIO_PIN_ROTARY_B, update_wheel, CHANGE);
 }
 
-void setup()
+extern "C" void app_main()
 {
+  // Initialize Arduino
+  initArduino();
   // Initialize Wire(ESP32-I2C)
   Wire.begin();
   // Serial communication using 115200bps
@@ -594,8 +596,4 @@ void setup()
 
   initialize_clicks();
   initialize_wheel();
-}
-
-void loop()
-{
 }
