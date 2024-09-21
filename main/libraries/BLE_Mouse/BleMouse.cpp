@@ -155,7 +155,12 @@ void BleMouse::taskServer(void* pvParameter) {
 
   BLESecurity *pSecurity = new BLESecurity();
 
+  int passkey = 999983;
   pSecurity->setAuthenticationMode(ESP_LE_AUTH_BOND);
+  pSecurity->setCapability(ESP_IO_CAP_OUT);
+  pSecurity->setKeySize(16);
+  pSecurity->setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
+  esp_ble_gap_set_security_param(ESP_BLE_SM_SET_STATIC_PASSKEY, &passkey, sizeof(uint32_t));
 
   bleMouseInstance->hid->reportMap((uint8_t*)_hidReportDescriptor, sizeof(_hidReportDescriptor));
   bleMouseInstance->hid->startServices();

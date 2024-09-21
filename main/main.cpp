@@ -5,6 +5,8 @@
 #include <RotaryEncoder.h>
 #include <Ticker.h>
 #include <Wire.h>
+#include "esp_log.h"
+#include "esp_pm.h"
 
 // I2C address of BMX055 acceleration sensor
 #define Addr_Accl 0x19  // (JP1,JP2,JP3 = Open)
@@ -12,6 +14,8 @@
 #define Addr_Gyro 0x69  // (JP1,JP2,JP3 = Open)
 // I2C address of BMX055 magnetic sensor
 #define Addr_Mag 0x13   // (JP1,JP2,JP3 = Open)
+
+#define LOG_TAG "HandiClick"
 
 // Left Click
 #define GPIO_PIN_LEFT 32
@@ -21,10 +25,15 @@
 #define GPIO_PIN_ROTARY_A 5
 // Rotary Encoder 2
 #define GPIO_PIN_ROTARY_B 18
+// BLE Device Switch
+#define GPIO_PIN_DEVICE_SWITCH 13
+
+#define MAX_BONDED_DEVICES 2 // Maximum number of bonded devices
 
 hw_timer_t *timer_left = NULL;
 hw_timer_t *timer_right = NULL;
 hw_timer_t *timer_wheel = NULL;
+hw_timer_t *timer_touch = NULL;
 // time in ms to trigger the watchdog
 const int wdtTimeout = 10;
 
@@ -92,7 +101,7 @@ struct BMX055 {
   //------------------------------------------------------------//
     Wire.beginTransmission(Addr_Mag);
     Wire.write(0x4C);  // Select Mag register
-    Wire.write(0x00);  // Normal Mode, ODR = 10 Hz
+    Wire.write(0x07);  // Normal Mode, ODR = 30 Hz
     Wire.endTransmission();
   //------------------------------------------------------------//
     Wire.beginTransmission(Addr_Mag);
@@ -439,6 +448,7 @@ void mouse2d() {
 }
 
 void mouse3d() {
+  ESP_LOGI(LOG_TAG, "%d", device_num);
   signed char dx, dy;
   bool mode;
 
@@ -558,6 +568,18 @@ void initialize_wheel() {
   attachInterrupt(GPIO_PIN_ROTARY_B, update_wheel, CHANGE);
 }
 
+void switch_ble_device() {
+  device_num++;
+  if (device_num == MAX_BONDED_DEVICES) {
+    device_num = 0;
+  }
+}
+
+void enable_touvh() {
+  touchAttachInterrupt(GPIO_PIN_DEVICE_SWITCH, switch_ble_device, 40);
+  timerStop(timer_touch);
+}
+
 extern "C" void app_main()
 {
   // Initialize Arduino
@@ -571,15 +593,21 @@ extern "C" void app_main()
   timer_left = timerBegin(1000000);
   timer_right = timerBegin(1000000);
   timer_wheel = timerBegin(1000000);
+  timer_touch = timerBegin(1000000);
   timerStop(timer_left);
   timerStop(timer_right);
   timerStop(timer_wheel);
+  timerStop(timer_touch);
   timerAttachInterrupt(timer_left, &enable_left_click);
   timerAttachInterrupt(timer_right, &enable_right_click);
   timerAttachInterrupt(timer_wheel, &enable_wheel);
+  timerAttachInterrupt(timer_touch, &enable_touvh);
   timerAlarm(timer_left, wdtTimeout * 1000, false, 0);
   timerAlarm(timer_right, wdtTimeout * 1000, false, 0);
   timerAlarm(timer_wheel, wdtTimeout * 1000, false, 0);
+  timerAlarm(timer_touch, wdtTimeout * 1000, false, 0);
+
+  touchAttachInterrupt(GPIO_PIN_DEVICE_SWITCH, switch_ble_device, 40);
 
   // Initialize BLE Mouse
   bleMouse.begin();
@@ -592,7 +620,7 @@ extern "C" void app_main()
   motion3d.init(motion2d.default_accel[2]);
   MouseTicker.attach_ms(1, mouse2d);
 
-  Serial.println("End of the initialization");
+  ESP_LOGI(LOG_TAG, "End of the initialization");
 
   initialize_clicks();
   initialize_wheel();
