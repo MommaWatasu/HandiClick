@@ -12,6 +12,9 @@ $ cd esp
 $ git clone --recursive https://github.com/espressif/esp-idf.git
 $ git checkout v5.1.4
 $ git submodule update --init --recursive
+$ ./install.sh
+$ source export.sh
+$ idf.py set-target esp32
 ```
 
 ### Enable `arduino-esp32` component
