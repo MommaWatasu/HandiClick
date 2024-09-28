@@ -385,32 +385,18 @@ struct Motion3D {
     if (x > -10 && x < 10) {
       return 0.0;
     } else if (x > 0) {
-      return (x - 10) / 10;
+      return x - 10;
     } else {
-      return (x + 10) / 10;
+      return x + 10;
     }
   }
 
   signed char dx() {
-    signed char dx = -std::round(convert_range(pitch));
-    if (dx > 6) {
-      return 6;
-    } else if (dx < -6) {
-      return -6;
-    } else {
-      return dx;
-    }
+    return -std::round(convert_range(pitch));
   }
 
   signed char dy() {
-    signed char dy = -std::round(convert_range(roll));
-    if (dy > 6) {
-      return 6;
-    } else if (dy < -6) {
-      return -6;
-    } else {
-      return dy;
-    }
+    return -std::round(convert_range(roll));
   }
 };
 
@@ -466,7 +452,7 @@ void mouse3d() {
     dx = motion3d.dx();
     dy = motion3d.dy();
     if (dx != 0 || dy != 0) {
-      bleMouse.move(dx*5, dy*5, 0);
+      bleMouse.move(dx, dy, 0);
     }
   }
 }
@@ -548,17 +534,19 @@ void update_wheel() {
   int new_pos = encoder.getPosition();
   if (pos != new_pos) {
     if (bleMouse.isConnected()) {
-      bleMouse.move(0, 0, char(encoder.getDirection()) * 4);
+      bleMouse.move(0, 0, -char(encoder.getDirection()) * 2);
     }
     pos = new_pos;
   }
   detachInterrupt(GPIO_PIN_ROTARY_A);
+  detachInterrupt(GPIO_PIN_ROTARY_B);
   timerWrite(timer_wheel, 0);
   timerStart(timer_wheel);
 }
 
 void enable_wheel() {
   attachInterrupt(GPIO_PIN_ROTARY_A, update_wheel, CHANGE);
+  attachInterrupt(GPIO_PIN_ROTARY_B, update_wheel, CHANGE);
   timerStop(timer_wheel);
 }
 
@@ -625,7 +613,7 @@ extern "C" void app_main()
   timerAttachInterrupt(timer_switch, &enable_switch);
   timerAlarm(timer_left, wdtTimeout * 1000, false, 0);
   timerAlarm(timer_right, wdtTimeout * 1000, false, 0);
-  timerAlarm(timer_wheel, wdtTimeout * 1000, false, 0);
+  timerAlarm(timer_wheel, 2 * 1000, false, 0);
   timerAlarm(timer_switch, wdtTimeout * 1000, false, 0);
 
   // Initialize BMX055
@@ -644,7 +632,7 @@ extern "C" void app_main()
   initialize_switch();
 
   // Configure power management to enable automatic light sleep
-  esp_pm_config_esp32_t pm_config;
+  esp_pm_config_t pm_config;
   pm_config.max_freq_mhz = 240; // Set the maximum frequency to 80 MHz
   pm_config.min_freq_mhz = 10; // Set the minimum frequency to 10 MHz
   pm_config.light_sleep_enable = true; // Enable light sleep
