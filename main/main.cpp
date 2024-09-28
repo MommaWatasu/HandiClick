@@ -33,7 +33,7 @@
 hw_timer_t *timer_left = NULL;
 hw_timer_t *timer_right = NULL;
 hw_timer_t *timer_wheel = NULL;
-hw_timer_t *timer_touch = NULL;
+hw_timer_t *timer_switch = NULL;
 // time in ms to trigger the watchdog
 const int wdtTimeout = 10;
 
@@ -448,7 +448,6 @@ void mouse2d() {
 }
 
 void mouse3d() {
-  ESP_LOGI(LOG_TAG, "%d", device_num);
   signed char dx, dy;
   bool mode;
 
@@ -569,15 +568,37 @@ void initialize_wheel() {
 }
 
 void switch_ble_device() {
-  device_num++;
-  if (device_num == MAX_BONDED_DEVICES) {
+  if (digitalRead(GPIO_PIN_DEVICE_SWITCH) == HIGH) {
+    device_num = 1;
+  } else {
     device_num = 0;
   }
+  detachInterrupt(GPIO_PIN_DEVICE_SWITCH);
+  timerWrite(timer_switch, 0);
+  timerStart(timer_switch);
 }
 
-void enable_touvh() {
-  touchAttachInterrupt(GPIO_PIN_DEVICE_SWITCH, switch_ble_device, 40);
-  timerStop(timer_touch);
+void enable_switch() {
+  timerStop(timer_switch);
+}
+
+// initialize the device switch
+void initialize_switch() {
+  pinMode(GPIO_PIN_DEVICE_SWITCH, INPUT_PULLUP);
+  // Initialize the device_num to device which device to connect
+  if (digitalRead(GPIO_PIN_DEVICE_SWITCH) == HIGH) {
+    device_num = 1;
+    ESP_LOGI(LOG_TAG, "Device 1");
+    esp_ble_gap_update_whitelist(false, bonded_devices[0].bd_addr, BLE_WL_ADDR_TYPE_PUBLIC);
+    esp_ble_gap_update_whitelist(true, bonded_devices[1].bd_addr, BLE_WL_ADDR_TYPE_PUBLIC);
+  } else {
+    device_num = 0;
+    ESP_LOGI(LOG_TAG, "Device 0");
+    esp_ble_gap_update_whitelist(false, bonded_devices[1].bd_addr, BLE_WL_ADDR_TYPE_PUBLIC);
+    esp_ble_gap_update_whitelist(true, bonded_devices[0].bd_addr, BLE_WL_ADDR_TYPE_PUBLIC);
+  }
+  // set the interruption handler for device switch
+  attachInterrupt(GPIO_PIN_DEVICE_SWITCH, switch_ble_device, CHANGE);
 }
 
 extern "C" void app_main()
@@ -593,24 +614,19 @@ extern "C" void app_main()
   timer_left = timerBegin(1000000);
   timer_right = timerBegin(1000000);
   timer_wheel = timerBegin(1000000);
-  timer_touch = timerBegin(1000000);
+  timer_switch = timerBegin(1000000);
   timerStop(timer_left);
   timerStop(timer_right);
   timerStop(timer_wheel);
-  timerStop(timer_touch);
+  timerStop(timer_switch);
   timerAttachInterrupt(timer_left, &enable_left_click);
   timerAttachInterrupt(timer_right, &enable_right_click);
   timerAttachInterrupt(timer_wheel, &enable_wheel);
-  timerAttachInterrupt(timer_touch, &enable_touvh);
+  timerAttachInterrupt(timer_switch, &enable_switch);
   timerAlarm(timer_left, wdtTimeout * 1000, false, 0);
   timerAlarm(timer_right, wdtTimeout * 1000, false, 0);
   timerAlarm(timer_wheel, wdtTimeout * 1000, false, 0);
-  timerAlarm(timer_touch, wdtTimeout * 1000, false, 0);
-
-  touchAttachInterrupt(GPIO_PIN_DEVICE_SWITCH, switch_ble_device, 40);
-
-  // Initialize BLE Mouse
-  bleMouse.begin();
+  timerAlarm(timer_switch, wdtTimeout * 1000, false, 0);
 
   // Initialize BMX055
   bmx.init();
@@ -622,6 +638,11 @@ extern "C" void app_main()
 
   ESP_LOGI(LOG_TAG, "End of the initialization");
 
+  // Initialize the interruption handler for several GPIO pins
   initialize_clicks();
   initialize_wheel();
+  initialize_switch();
+
+  // Initialize BLE Mouse
+  bleMouse.begin();
 }
