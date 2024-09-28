@@ -643,6 +643,14 @@ extern "C" void app_main()
   initialize_wheel();
   initialize_switch();
 
+  // Configure power management to enable automatic light sleep
+  esp_pm_config_esp32_t pm_config;
+  pm_config.max_freq_mhz = 240; // Set the maximum frequency to 80 MHz
+  pm_config.min_freq_mhz = 10; // Set the minimum frequency to 10 MHz
+  pm_config.light_sleep_enable = true; // Enable light sleep
+
+  ESP_ERROR_CHECK(esp_pm_configure(&pm_config));
+
   // Initialize BLE Mouse
   bleMouse.begin();
 }
