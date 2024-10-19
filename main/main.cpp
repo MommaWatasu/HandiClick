@@ -30,10 +30,10 @@
 
 #define MAX_BONDED_DEVICES 2 // Maximum number of bonded devices
 
-hw_timer_t *timer_left = NULL;
-hw_timer_t *timer_right = NULL;
-hw_timer_t *timer_wheel = NULL;
-hw_timer_t *timer_switch = NULL;
+TimerHandle_t timer_left = NULL;
+TimerHandle_t timer_right = NULL;
+TimerHandle_t timer_wheel = NULL;
+TimerHandle_t timer_switch = NULL;
 // time in ms to trigger the watchdog
 const int wdtTimeout = 10;
 
@@ -457,43 +457,43 @@ void mouse3d() {
   }
 }
 
+// set the interruption handler for left click
 void left_click() {
   if (bleMouse.isConnected()) {
     bleMouse.click(MOUSE_LEFT);
   }
   detachInterrupt(GPIO_PIN_LEFT);
-  timerWrite(timer_left, 0);
-  timerStart(timer_left);
+  xTimerStart(timer_left, 0);
 }
 
+// set the interruption handler for right click
 void right_click() {
   if (bleMouse.isConnected()) {
     bleMouse.click(MOUSE_RIGHT);
   }
   detachInterrupt(GPIO_PIN_RIGHT);
-  timerWrite(timer_right, 0);
-  timerStart(timer_right);
+  xTimerStart(timer_right, 0);
 }
 
+// set the interruption handler for left drag
 void left_click_rm() {
   if (bleMouse.isConnected()) {
     bleMouse.release(MOUSE_LEFT);
   }
   detachInterrupt(GPIO_PIN_LEFT);
-  timerWrite(timer_left, 0);
-  timerStart(timer_left);
+  xTimerStart(timer_left, 0);
 }
 
+// set the interruption handler for right drag
 void right_click_rm() {
   if (bleMouse.isConnected()) {
     bleMouse.release(MOUSE_RIGHT);
   }
   detachInterrupt(GPIO_PIN_RIGHT);
-  timerWrite(timer_right, 0);
-  timerStart(timer_right);
+  xTimerStart(timer_right, 0);
 }
 
-void enable_left_click() {
+void enable_left_click(TimerHandle_t _) {
   if (digitalRead(GPIO_PIN_LEFT) == HIGH) {
     attachInterrupt(GPIO_PIN_LEFT, left_click_rm, FALLING);
     if (bleMouse.isConnected()) {
@@ -502,10 +502,10 @@ void enable_left_click() {
   } else {
     attachInterrupt(GPIO_PIN_LEFT, left_click, RISING);
   }
-  timerStop(timer_left);
+  xTimerStop(timer_left, 0);
 }
 
-void enable_right_click() {
+void enable_right_click(TimerHandle_t _) {
   if (digitalRead(GPIO_PIN_RIGHT) == HIGH) {
     attachInterrupt(GPIO_PIN_RIGHT, right_click_rm, FALLING);
     if (bleMouse.isConnected()) {
@@ -514,7 +514,7 @@ void enable_right_click() {
   } else {
     attachInterrupt(GPIO_PIN_RIGHT, right_click, RISING);
   }
-  timerStop(timer_right);
+  xTimerStop(timer_right, 0);
 }
 
 // set the interruption handler for left and right click
@@ -540,14 +540,13 @@ void update_wheel() {
   }
   detachInterrupt(GPIO_PIN_ROTARY_A);
   detachInterrupt(GPIO_PIN_ROTARY_B);
-  timerWrite(timer_wheel, 0);
-  timerStart(timer_wheel);
+  xTimerStart(timer_wheel, 0);
 }
 
-void enable_wheel() {
+void enable_wheel(TimerHandle_t _) {
   attachInterrupt(GPIO_PIN_ROTARY_A, update_wheel, CHANGE);
   attachInterrupt(GPIO_PIN_ROTARY_B, update_wheel, CHANGE);
-  timerStop(timer_wheel);
+  xTimerStop(timer_wheel, 0);
 }
 
 void initialize_wheel() {
@@ -562,12 +561,11 @@ void switch_ble_device() {
     device_num = 0;
   }
   detachInterrupt(GPIO_PIN_DEVICE_SWITCH);
-  timerWrite(timer_switch, 0);
-  timerStart(timer_switch);
+  xTimerStart(timer_switch, 0);
 }
 
-void enable_switch() {
-  timerStop(timer_switch);
+void enable_switch(TimerHandle_t _) {
+  xTimerStop(timer_switch, 0);
 }
 
 // initialize the device switch
@@ -598,23 +596,11 @@ extern "C" void app_main()
   // Serial communication using 115200bps
   Serial.begin(115200);
 
-  // configure timers to prevent chattering
-  timer_left = timerBegin(1000000);
-  timer_right = timerBegin(1000000);
-  timer_wheel = timerBegin(1000000);
-  timer_switch = timerBegin(1000000);
-  timerStop(timer_left);
-  timerStop(timer_right);
-  timerStop(timer_wheel);
-  timerStop(timer_switch);
-  timerAttachInterrupt(timer_left, &enable_left_click);
-  timerAttachInterrupt(timer_right, &enable_right_click);
-  timerAttachInterrupt(timer_wheel, &enable_wheel);
-  timerAttachInterrupt(timer_switch, &enable_switch);
-  timerAlarm(timer_left, wdtTimeout * 1000, false, 0);
-  timerAlarm(timer_right, wdtTimeout * 1000, false, 0);
-  timerAlarm(timer_wheel, 2 * 1000, false, 0);
-  timerAlarm(timer_switch, wdtTimeout * 1000, false, 0);
+  // Create timers to prevent chattering
+  timer_left = xTimerCreate("TimerLeft", pdMS_TO_TICKS(wdtTimeout), pdFALSE, NULL, enable_left_click);
+  timer_right = xTimerCreate("TimerRight", pdMS_TO_TICKS(wdtTimeout), pdFALSE, NULL, enable_right_click);
+  timer_wheel = xTimerCreate("TimerWheel", pdMS_TO_TICKS(2), pdFALSE, NULL, enable_wheel);
+  timer_switch = xTimerCreate("TimerSwitch", pdMS_TO_TICKS(wdtTimeout), pdFALSE, NULL, enable_switch);
 
   // Initialize BMX055
   bmx.init();
