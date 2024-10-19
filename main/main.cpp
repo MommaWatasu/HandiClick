@@ -37,6 +37,8 @@ TimerHandle_t timer_switch = NULL;
 // time in ms to trigger the watchdog
 const int wdtTimeout = 10;
 
+int sleep_mode_count = 0;
+
 struct BMX055 {
   // unite: m/s^2
   std::array<float, 3> accel;
@@ -408,6 +410,7 @@ BleMouse bleMouse("HandiClick", "GateHorse", 100);
 Ticker MouseTicker;
 
 void mouse3d();
+void check_wakeup();
 
 void mouse2d() {
   signed char dx, dy;
@@ -427,7 +430,15 @@ void mouse2d() {
   if(bleMouse.isConnected()) {
     dx = motion2d.dx();
     dy = motion2d.dy();
-    if (dx != 0 || dy != 0) {
+    if (dx == 0 && dy == 0) {
+      sleep_mode_count += 1;
+      if (sleep_mode_count > 100) {
+        sleep_mode_count = 0;
+        MouseTicker.detach();
+        MouseTicker.attach_ms(100, check_wakeup);
+      }
+    } else {
+      sleep_mode_count = 0;
       bleMouse.move(dx, dy, 0);
     }
   }
@@ -454,6 +465,18 @@ void mouse3d() {
     if (dx != 0 || dy != 0) {
       bleMouse.move(dx, dy, 0);
     }
+  }
+}
+
+void check_wakeup() {
+  printf("CheckWakeup\n");
+
+  bmx.update_accel();
+  motion2d.update_velocity(bmx.accel.data());
+
+  if (motion2d.dx() != 0 || motion2d.dy() != 0) {
+    MouseTicker.detach();
+    MouseTicker.attach_ms(1, mouse2d);
   }
 }
 
