@@ -36,6 +36,7 @@ TimerHandle_t timer_wheel = NULL;
 TimerHandle_t timer_switch = NULL;
 // time in ms to trigger the watchdog
 const int wdtTimeout = 10;
+const int dt = 2; // time in ms to update 2d mouse
 
 int sleep_mode_count = 0;
 
@@ -61,7 +62,7 @@ struct BMX055 {
   //------------------------------------------------------------//
     Wire.beginTransmission(Addr_Accl);
     Wire.write(0x10);  // Select PMU_BW register
-    Wire.write(0x0F);  // Bandwidth = 1000 Hz
+    Wire.write(0x0d);  // Bandwidth = 250 Hz interval = 2ms
     Wire.endTransmission();
     delay(100); // 100ms
   //------------------------------------------------------------//
@@ -320,11 +321,11 @@ struct Motion2D {
   }
 
   signed char dx() {
-    return -std::round(vel[0]);
+    return -std::round(vel[0]) * dt;
   }
 
   signed char dy() {
-    return std::round(dpos[1]);
+    return std::round(dpos[1]) * dt;
   }
 };
 
@@ -454,8 +455,8 @@ void mouse3d() {
   mode = motion3d.check_mode();
   if (!mode) {
     MouseTicker.detach();
-    delay(10); // 10ms
-    MouseTicker.attach_ms(1, mouse2d);
+    delay(20); // 20ms
+    MouseTicker.attach_ms(dt, mouse2d);
     return;
   }
 
@@ -469,8 +470,6 @@ void mouse3d() {
 }
 
 void check_wakeup() {
-  printf("CheckWakeup\n");
-
   bmx.update_accel();
   motion2d.update_velocity(bmx.accel.data());
 
@@ -631,7 +630,7 @@ extern "C" void app_main()
 
   motion2d.init();
   motion3d.init(motion2d.default_accel[2]);
-  MouseTicker.attach_ms(1, mouse2d);
+  MouseTicker.attach_ms(dt, mouse2d);
 
   ESP_LOGI(LOG_TAG, "End of the initialization");
 
