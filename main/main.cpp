@@ -320,6 +320,13 @@ struct Motion2D {
     return true;
   }
 
+  bool check_wakeup(float accel[3]) {
+    if (abs(accel[0] - default_accel[0]) > 0.08 || abs(accel[1] - default_accel[1]) > 0.08 || abs(accel[2] - default_accel[2]) > 0.08) {
+      return true;
+    }
+    return false;
+  }
+
   signed char dx() {
     return -std::round(vel[0]) * dt;
   }
@@ -436,7 +443,7 @@ void mouse2d() {
       if (sleep_mode_count > 100) {
         sleep_mode_count = 0;
         MouseTicker.detach();
-        MouseTicker.attach_ms(100, check_wakeup);
+        MouseTicker.attach_ms(50, check_wakeup);
       }
     } else {
       sleep_mode_count = 0;
@@ -455,7 +462,8 @@ void mouse3d() {
   mode = motion3d.check_mode();
   if (!mode) {
     MouseTicker.detach();
-    delay(20); // 20ms
+    delay(10); // 10ms
+    motion2d.init();
     MouseTicker.attach_ms(dt, mouse2d);
     return;
   }
@@ -473,9 +481,9 @@ void check_wakeup() {
   bmx.update_accel();
   motion2d.update_velocity(bmx.accel.data());
 
-  if (motion2d.dx() != 0 || motion2d.dy() != 0) {
+  if (motion2d.check_wakeup(bmx.accel.data())) {
     MouseTicker.detach();
-    MouseTicker.attach_ms(1, mouse2d);
+    MouseTicker.attach_ms(dt, mouse2d);
   }
 }
 
