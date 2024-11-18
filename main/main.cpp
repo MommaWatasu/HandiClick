@@ -40,6 +40,70 @@ const int dt = 2; // time in ms to update 2d mouse
 
 int sleep_mode_count = 0;
 
+// structure to store the events(move, press, wheel) of the mouse
+struct MouseEvent {
+  enum class Type {
+    NONE,
+    MOVE,
+    PRESS,
+    RELEASE,
+  };
+
+  Type type;
+  union {
+    struct {
+      signed char dx;
+      signed char dy;
+      signed char wheel;
+    } move;
+    struct {
+      uint8_t button;
+    } press;
+    struct {
+      uint8_t button;
+    } release;
+  };
+
+  MouseEvent() : type(Type::NONE) {}
+  MouseEvent(Type t) : type(t) {}
+};
+
+// FIFO Queue for Events
+struct EventQueue {
+  MouseEvent event_queue[10];
+  int head;
+  int tail;
+
+  EventQueue() : head(0), tail(0) {}
+
+  bool push(const MouseEvent &event) {
+    if (full()) {
+      return false;
+    }
+    event_queue[tail] = event;
+    tail = (tail + 1) % 10;
+    return true;
+  }
+
+  MouseEvent pop() {
+    if (empty()) {
+      return MouseEvent(MouseEvent::Type::NONE);
+    }
+    MouseEvent event = event_queue[head];
+    head = (head + 1) % 10;
+    return event;
+  }
+
+  bool empty() {
+    return head == tail;
+  }
+
+  bool full() {
+    return (tail + 1) % 10 == head;
+  }
+};
+EventQueue event_queue;
+
 struct BMX055 {
   // unite: m/s^2
   std::array<float, 3> accel;
@@ -447,7 +511,13 @@ void mouse2d() {
       }
     } else {
       sleep_mode_count = 0;
-      bleMouse.move(dx, dy, 0);
+      // define event
+      MouseEvent event = MouseEvent(MouseEvent::Type::MOVE);
+      event.move.dx = dx;
+      event.move.dy = dy;
+      event.move.wheel = 0;
+      // enqueue the event
+      event_queue.push(event);
     }
   }
 }
@@ -472,7 +542,13 @@ void mouse3d() {
     dx = motion3d.dx();
     dy = motion3d.dy();
     if (dx != 0 || dy != 0) {
-      bleMouse.move(dx, dy, 0);
+      // define event
+      MouseEvent event = MouseEvent(MouseEvent::Type::MOVE);
+      event.move.dx = dx;
+      event.move.dy = dy;
+      event.move.wheel = 0;
+      // enqueue the event
+      event_queue.push(event);
     }
   }
 }
@@ -508,7 +584,11 @@ void right_click() {
 // set the interruption handler for left drag
 void left_click_rm() {
   if (bleMouse.isConnected()) {
-    bleMouse.release(MOUSE_LEFT);
+    // define event
+    MouseEvent event = MouseEvent(MouseEvent::Type::RELEASE);
+    event.release.button = MOUSE_LEFT;
+    // enqueue the event
+    event_queue.push(event);
   }
   detachInterrupt(GPIO_PIN_LEFT);
   xTimerStart(timer_left, 0);
@@ -517,7 +597,11 @@ void left_click_rm() {
 // set the interruption handler for right drag
 void right_click_rm() {
   if (bleMouse.isConnected()) {
-    bleMouse.release(MOUSE_RIGHT);
+    // define event
+    MouseEvent event = MouseEvent(MouseEvent::Type::RELEASE);
+    event.release.button = MOUSE_RIGHT;
+    // enqueue the event
+    event_queue.push(event);
   }
   detachInterrupt(GPIO_PIN_RIGHT);
   xTimerStart(timer_right, 0);
@@ -527,7 +611,11 @@ void enable_left_click(TimerHandle_t _) {
   if (digitalRead(GPIO_PIN_LEFT) == HIGH) {
     attachInterrupt(GPIO_PIN_LEFT, left_click_rm, FALLING);
     if (bleMouse.isConnected()) {
-      bleMouse.press(MOUSE_LEFT);
+      // define event
+      MouseEvent event = MouseEvent(MouseEvent::Type::PRESS);
+      event.press.button = MOUSE_LEFT;
+      // enqueue the event
+      event_queue.push(event);
     }
   } else {
     attachInterrupt(GPIO_PIN_LEFT, left_click, RISING);
@@ -539,7 +627,11 @@ void enable_right_click(TimerHandle_t _) {
   if (digitalRead(GPIO_PIN_RIGHT) == HIGH) {
     attachInterrupt(GPIO_PIN_RIGHT, right_click_rm, FALLING);
     if (bleMouse.isConnected()) {
-      bleMouse.press(MOUSE_RIGHT);
+      // define event
+      MouseEvent event = MouseEvent(MouseEvent::Type::PRESS);
+      event.press.button = MOUSE_RIGHT;
+      // enqueue the event
+      event_queue.push(event);
     }
   } else {
     attachInterrupt(GPIO_PIN_RIGHT, right_click, RISING);
@@ -564,7 +656,11 @@ void update_wheel() {
   int new_pos = encoder.getPosition();
   if (pos != new_pos) {
     if (bleMouse.isConnected()) {
-      bleMouse.move(0, 0, -char(encoder.getDirection()) * 2);
+      // define event
+      MouseEvent event = MouseEvent(MouseEvent::Type::MOVE);
+      event.move.wheel = -char(encoder.getDirection()) * 2;
+      // enqueue the event
+      event_queue.push(event);
     }
     pos = new_pos;
   }
@@ -657,4 +753,35 @@ extern "C" void app_main()
 
   // Initialize BLE Mouse
   bleMouse.begin();
+  while (1) {
+    if (event_queue.empty()) {
+      delay(dt);
+      continue;
+    } else {
+      MouseEvent event = event_queue.pop();
+      switch (event.type) {
+        case MouseEvent::Type::MOVE:
+          if (bleMouse.isConnected()) {
+            bleMouse.move(event.move.dx, event.move.dy, event.move.wheel);
+          }
+          break;
+        case MouseEvent::Type::PRESS:
+          if (bleMouse.isConnected()) {
+            bleMouse.press(event.press.button);
+          }
+          break;
+        case MouseEvent::Type::RELEASE:
+          if (bleMouse.isConnected()) {
+            bleMouse.release(event.release.button);
+          }
+          break;
+        default:
+          break;
+      }
+    }
+    // check free heap memory and if it's nearly full, wait for a while
+    while (ESP.getFreeHeap() < 1000) {
+      delay(2);
+    }
+  }
 }
