@@ -707,6 +707,8 @@ void enable_switch(TimerHandle_t _) {
 
 // initialize the device switch
 void initialize_switch() {
+  int list_size = 2;
+  esp_ble_get_bond_device_list(&list_size, bonded_devices);
   pinMode(GPIO_PIN_DEVICE_SWITCH, INPUT_PULLUP);
   // Load bonded device from NVS
   inactive_bonded_device.load();
