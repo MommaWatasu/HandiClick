@@ -707,21 +707,17 @@ void enable_switch(TimerHandle_t _) {
 
 // initialize the device switch
 void initialize_switch() {
-  int list_size = 2;
-  esp_ble_get_bond_device_list(&list_size, bonded_devices);
-  pinMode(GPIO_PIN_DEVICE_SWITCH, INPUT_PULLUP);
-  // Load bonded device from NVS
+  // Load bonded devices from NVS
+  load_bonded_devices();
+  // Load inactive bond device from NVS
   inactive_bonded_device.load();
+  pinMode(GPIO_PIN_DEVICE_SWITCH, INPUT_PULLUP);
   if (digitalRead(GPIO_PIN_DEVICE_SWITCH) == HIGH) {
     device_num = 1;
     ESP_LOGI(LOG_TAG, "Device 1");
-    esp_ble_gap_update_whitelist(false, bonded_devices[0].bd_addr, BLE_WL_ADDR_TYPE_PUBLIC);
-    esp_ble_gap_update_whitelist(true, bonded_devices[1].bd_addr, BLE_WL_ADDR_TYPE_PUBLIC);
   } else {
     device_num = 0;
     ESP_LOGI(LOG_TAG, "Device 0");
-    esp_ble_gap_update_whitelist(false, bonded_devices[1].bd_addr, BLE_WL_ADDR_TYPE_PUBLIC);
-    esp_ble_gap_update_whitelist(true, bonded_devices[0].bd_addr, BLE_WL_ADDR_TYPE_PUBLIC);
   }
   // set the interruption handler for device switch
   attachInterrupt(GPIO_PIN_DEVICE_SWITCH, switch_ble_device, CHANGE);
@@ -792,12 +788,8 @@ extern "C" void app_main()
         case MouseEvent::Type::SWITCH:
           if (event.switch_device.device == 0) {
             ESP_LOGI(LOG_TAG, "Device 0");
-            esp_ble_gap_update_whitelist(false, bonded_devices[1].bd_addr, BLE_WL_ADDR_TYPE_PUBLIC);
-            esp_ble_gap_update_whitelist(true, bonded_devices[0].bd_addr, BLE_WL_ADDR_TYPE_PUBLIC);
           } else {
             ESP_LOGI(LOG_TAG, "Device 1");
-            esp_ble_gap_update_whitelist(false, bonded_devices[0].bd_addr, BLE_WL_ADDR_TYPE_PUBLIC);
-            esp_ble_gap_update_whitelist(true, bonded_devices[1].bd_addr, BLE_WL_ADDR_TYPE_PUBLIC);
           }
           if (memcmp(connected_device_addr, bonded_devices[event.switch_device.device].bd_addr, sizeof(connected_device_addr)) != 0) {
             esp_ble_gap_disconnect(connected_device_addr);

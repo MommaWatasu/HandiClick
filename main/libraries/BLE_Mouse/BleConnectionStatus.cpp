@@ -20,6 +20,7 @@ void BleConnectionStatus::onConnect(BLEServer* pServer, esp_ble_gatts_cb_param_t
           param->connect.remote_bda[3], param->connect.remote_bda[4], param->connect.remote_bda[5]);
   if (num_bonded_dev == 0) {
     ESP_LOGI(LOG_TAG, "Bonding device with MAC address: %18s", macStr);
+    bonded_devices[0] = param->connect.remote_bda;
     pServer->getAdvertising()->stop();
 
     ESP_LOGI(LOG_TAG, "Updating bonded devices");
@@ -29,13 +30,7 @@ void BleConnectionStatus::onConnect(BLEServer* pServer, esp_ble_gatts_cb_param_t
       pServer->getAdvertising()->stop();
 
       ESP_LOGI(LOG_TAG, "Updating bonded devices");
-      int list_size = 2;
-      esp_ble_get_bond_device_list(&list_size, bonded_devices);
-
-      esp_ble_gap_clear_whitelist();
-      BLEAddress address = BLEAddress(bonded_devices[device_num].bd_addr);
-      BLEDevice::whiteListAdd(address);
-      pServer->getAdvertising()->setScanFilter(true, true);
+      bonded_devices[1] = param->connect.remote_bda;
     }
   } else {
     ESP_LOGI(LOG_TAG, "Connected to device with MAC address: %18s", macStr);

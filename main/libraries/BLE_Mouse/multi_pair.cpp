@@ -8,7 +8,7 @@ const char* namespace_name = "HandiClick";
 
 int32_t num_bonded_dev = 0;
 int device_num = 0;
-esp_ble_bond_dev_t bonded_devices[MAX_BONDED_DEVICES] = {};
+esp_bd_addr_t bonded_devices[MAX_BONDED_DEVICES] = {};
 esp_bd_addr_t connected_device_addr;
 BondedDevice inactive_bonded_device = EmptyBondedDevice;
 
@@ -75,4 +75,63 @@ void BondedDevice::swap() {
     esp_ble_add_bond_device(this->bd_addr, this->dev_class, this->link_key, this->trusted_mask, this->is_trusted, this->key_type, this->io_cap, this->pin_length, this->sc_support);
 
     this = new_device;
+}
+
+void save_bonded_dveices() {
+    nvs_handle_t nvs_handle;
+    esp_err_t err;
+
+    // Open NVS handle
+    err = nvs_open(namespace_name, NVS_READWRITE, &nvs_handle);
+    if (err != ESP_OK) {
+        return;
+    }
+
+    // Save number of bonded devices
+    err = nvs_set_i32(nvs_handle, "num_bonded_dev", num_bonded_dev);
+    if (err != ESP_OK) {
+        nvs_close(nvs_handle);
+        return;
+    }
+
+    // Save bonded devices
+    err = nvs_set_blob(nvs_handle, "bonded_devices", bonded_devices, sizeof(esp_bd_addr_t) * MAX_BONDED_DEVICES);
+    if (err != ESP_OK) {
+        nvs_close(nvs_handle);
+        return;
+    }
+
+    // Commit the write
+    err = nvs_commit(nvs_handle);
+    nvs_close(nvs_handle);
+}
+
+void load_bonded_devices() {
+    nvs_handle_t nvs_handle;
+    esp_err_t err;
+
+    // Open NVS handle
+    err = nvs_open(namespace_name, NVS_READWRITE, &nvs_handle);
+    if (err != ESP_OK) {
+        return;
+    }
+
+    // Read number of bonded devices
+    err = nvs_get_i32(nvs_handle, "num_bonded_dev", &num_bonded_dev);
+    if (err != ESP_OK) {
+        nvs_close(nvs_handle);
+        return;
+    }
+
+    // Read bonded devices
+    size_t required_size = sizeof(esp_bd_addr_t) * MAX_BONDED_DEVICES;
+    err = nvs_get_blob(nvs_handle, "bonded_devices", bonded_devices, &required_size);
+    if (err != ESP_OK) {
+        nvs_close(nvs_handle);
+        return;
+    }
+
+    // Commit the write
+    err = nvs_commit(nvs_handle);
+    nvs_close(nvs_handle);
 }

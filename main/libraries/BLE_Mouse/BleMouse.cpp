@@ -168,20 +168,8 @@ void BleMouse::taskServer(void* pvParameter) {
 
   bleMouseInstance->onStarted(pServer);
 
-  num_bonded_dev = esp_ble_get_bond_device_num();
-  ESP_LOGI(LOG_TAG, "Loading bonded devices");
-  int list_size = 2;
-  esp_ble_get_bond_device_list(&list_size, bonded_devices);
-
   BLEAdvertising *pAdvertising = pServer->getAdvertising();
   pAdvertising->setAppearance(HID_MOUSE);
-
-  // If there are 2 bonded devices, add the selected device to the whitelist
-  if (num_bonded_dev == 2) {
-    BLEAddress address = BLEAddress(bonded_devices[device_num].bd_addr);
-    BLEDevice::whiteListAdd(address);
-    pAdvertising->setScanFilter(true, true);
-  }
 
   pAdvertising->addServiceUUID(bleMouseInstance->hid->hidService()->getUUID());
   pAdvertising->start();

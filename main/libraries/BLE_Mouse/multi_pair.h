@@ -40,6 +40,9 @@ const BondedDevice EmptyBondedDevice = BondedDevice{0, {0}, {0}, {0}, 0, false, 
 #define MAX_BONDED_DEVICES 2 // Maximum number of bonded devices
 extern int32_t num_bonded_dev;
 extern int device_num;
-extern esp_ble_bond_dev_t bonded_devices[MAX_BONDED_DEVICES];
+extern esp_bd_addr_t bonded_devices[MAX_BONDED_DEVICES];
 extern esp_bd_addr_t connected_device_addr;
 extern BondedDevice inactive_bonded_device;
+
+void save_bonded_dveices();
+void load_bonded_devices();
