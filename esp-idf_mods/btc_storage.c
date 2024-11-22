@@ -80,8 +80,8 @@ bt_status_t btc_storage_add_bonded_device(bt_bdaddr_t *remote_bd_addr,
 bt_status_t btc_storage_get_bonded_device_info(bt_bdaddr_t *remote_bd_addr,
         DEV_CLASS *dev_class,
         LINK_KEY link_key,
-        UINT8 *key_type,
-        UINT8 *pin_length,
+        uint8_t *key_type,
+        uint8_t *pin_length,
         BOOLEAN *sc_support)
 {
     bdstr_t bdstr;

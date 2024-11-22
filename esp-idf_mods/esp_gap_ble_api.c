@@ -13,6 +13,7 @@
 #include "btc/btc_manage.h"
 #include "btc_gap_ble.h"
 #include "btc/btc_ble_storage.h"
+#include "btc/btc_storage.h"
 
 
 esp_err_t esp_ble_gap_register_callback(esp_gap_ble_cb_t callback)
@@ -683,6 +684,24 @@ esp_err_t esp_ble_confirm_reply(esp_bd_addr_t bd_addr, bool accept)
 
     return (btc_transfer_context(&msg, &arg, sizeof(btc_ble_gap_args_t), NULL, NULL)
             == BT_STATUS_SUCCESS ? ESP_OK : ESP_FAIL);
+}
+
+
+esp_err_t esp_ble_get_bond_device_info(esp_bd_addr_t *remote_bd_addr,
+        DEV_CLASS *dev_class,
+        LINK_KEY *link_key,
+        UINT8 *key_type,
+        UINT8 *pin_length,
+        BOOLEAN *sc_support)
+{
+    bt_bdaddr_t bd_addr;
+    bt_status_t ret = btc_storage_get_bonded_device_info(&bd_addr, dev_class, link_key, key_type, pin_length, sc_support);
+    if (ret != BT_STATUS_SUCCESS) {
+        return ESP_FAIL;
+    }
+
+    memcpy(remote_bd_addr, bd_addr.address, ESP_BD_ADDR_LEN);
+    return ESP_OK;
 }
 
 esp_err_t esp_ble_add_bond_device(
