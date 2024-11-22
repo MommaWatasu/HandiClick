@@ -47,6 +47,7 @@ struct MouseEvent {
     MOVE,
     PRESS,
     RELEASE,
+    SWITCH
   };
 
   Type type;
@@ -62,6 +63,9 @@ struct MouseEvent {
     struct {
       uint8_t button;
     } release;
+    struct {
+      uint8_t device;
+    } switch_device;
   };
 
   MouseEvent() : type(Type::NONE) {}
@@ -686,6 +690,13 @@ void switch_ble_device() {
   } else {
     device_num = 0;
   }
+
+  // define event
+  MouseEvent event = MouseEvent(MouseEvent::Type::SWITCH);
+  event.switch_device.device = device_num;
+  // enqueue the event
+  event_queue.push(event);
+
   detachInterrupt(GPIO_PIN_DEVICE_SWITCH);
   xTimerStart(timer_switch, 0);
 }
@@ -697,7 +708,8 @@ void enable_switch(TimerHandle_t _) {
 // initialize the device switch
 void initialize_switch() {
   pinMode(GPIO_PIN_DEVICE_SWITCH, INPUT_PULLUP);
-  // Initialize the device_num to device which device to connect
+  // Load bonded device from NVS
+  inactive_bonded_device.load();
   if (digitalRead(GPIO_PIN_DEVICE_SWITCH) == HIGH) {
     device_num = 1;
     ESP_LOGI(LOG_TAG, "Device 1");
@@ -773,6 +785,20 @@ extern "C" void app_main()
         case MouseEvent::Type::RELEASE:
           if (bleMouse.isConnected()) {
             bleMouse.release(event.release.button);
+          }
+          break;
+        case MouseEvent::Type::SWITCH:
+          if (event.switch_device.device == 0) {
+            ESP_LOGI(LOG_TAG, "Device 0");
+            esp_ble_gap_update_whitelist(false, bonded_devices[1].bd_addr, BLE_WL_ADDR_TYPE_PUBLIC);
+            esp_ble_gap_update_whitelist(true, bonded_devices[0].bd_addr, BLE_WL_ADDR_TYPE_PUBLIC);
+          } else {
+            ESP_LOGI(LOG_TAG, "Device 1");
+            esp_ble_gap_update_whitelist(false, bonded_devices[0].bd_addr, BLE_WL_ADDR_TYPE_PUBLIC);
+            esp_ble_gap_update_whitelist(true, bonded_devices[1].bd_addr, BLE_WL_ADDR_TYPE_PUBLIC);
+          }
+          if (memcmp(connected_device_addr, bonded_devices[event.switch_device.device].bd_addr, sizeof(connected_device_addr)) != 0) {
+            esp_ble_gap_disconnect(connected_device_addr);
           }
           break;
         default:
