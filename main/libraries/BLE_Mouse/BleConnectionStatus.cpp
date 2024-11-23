@@ -20,17 +20,17 @@ void BleConnectionStatus::onConnect(BLEServer* pServer, esp_ble_gatts_cb_param_t
           param->connect.remote_bda[3], param->connect.remote_bda[4], param->connect.remote_bda[5]);
   if (num_bonded_dev == 0) {
     ESP_LOGI(LOG_TAG, "Bonding device with MAC address: %18s", macStr);
-    bonded_devices[0] = param->connect.remote_bda;
+    memcpy(bonded_devices[0], param->connect.remote_bda, sizeof(esp_bd_addr_t));
     pServer->getAdvertising()->stop();
 
     ESP_LOGI(LOG_TAG, "Updating bonded devices");
   } else if (num_bonded_dev == 1) {
-    if (device_num == 1 && memcmp(param->connect.remote_bda, bonded_devices[0].bd_addr, sizeof(param->connect.remote_bda)) != 0) {
+    if (device_num == 1 && memcmp(param->connect.remote_bda, bonded_devices[0], sizeof(param->connect.remote_bda)) != 0) {
       ESP_LOGI(LOG_TAG, "Bonding device with MAC address: %18s", macStr);
       pServer->getAdvertising()->stop();
 
       ESP_LOGI(LOG_TAG, "Updating bonded devices");
-      bonded_devices[1] = param->connect.remote_bda;
+      memcpy(bonded_devices[1], param->connect.remote_bda, sizeof(esp_bd_addr_t));
     }
   } else {
     ESP_LOGI(LOG_TAG, "Connected to device with MAC address: %18s", macStr);

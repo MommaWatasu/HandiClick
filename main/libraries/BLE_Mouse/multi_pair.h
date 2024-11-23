@@ -14,6 +14,7 @@ typedef UINT8 tBTA_IO_CAP;
 
 #define LINK_KEY_LEN    16
 typedef UINT8 LINK_KEY[LINK_KEY_LEN];       /* Link Key */
+typedef UINT8 *LINK_KEY_PTR;                /* Pointer to Link Key */
 
 #define DEV_CLASS_LEN   3
 typedef UINT8 DEV_CLASS[DEV_CLASS_LEN];     /* Device class */

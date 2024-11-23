@@ -7,6 +7,7 @@
 #include <Wire.h>
 #include "esp_log.h"
 #include "esp_pm.h"
+#include "esp_gap_ble_api.h"
 
 // I2C address of BMX055 acceleration sensor
 #define Addr_Accl 0x19  // (JP1,JP2,JP3 = Open)
@@ -720,9 +721,10 @@ void initialize_switch() {
     ESP_LOGI(LOG_TAG, "Device 0");
   }
   int num_load_device = 1;
-  esp_bonded_device_t current_bonded_devices[1] = esp_ble_get_bond_device_list(&num_load_device, &current_bonded_devices);
-  if (num_bonded_devices != 0) {
-    if (memcmp(bonded_devices[device_num], current_bonded_devices[0].bd_addr, sizeof(bonded_devices[device_num])) != 0) {
+  esp_ble_bond_dev_t current_bonded_dev_list[1] = {};
+  esp_ble_get_bond_device_list(&num_load_device, current_bonded_dev_list);
+  if (num_bonded_dev != 0) {
+    if (memcmp(bonded_devices[device_num], current_bonded_dev_list[0].bd_addr, sizeof(bonded_devices[device_num])) != 0) {
       inactive_bonded_device.swap();
     }
   }
@@ -803,7 +805,7 @@ extern "C" void app_main()
           if (inactive_bonded_device.device_num == device_num) {
             inactive_bonded_device.swap();
           }
-          if (memcmp(connected_device_addr, bonded_devices[event.switch_device.device].bd_addr, sizeof(connected_device_addr)) != 0) {
+          if (memcmp(connected_device_addr, bonded_devices[event.switch_device.device], sizeof(connected_device_addr)) != 0) {
             esp_ble_gap_disconnect(connected_device_addr);
           }
           break;

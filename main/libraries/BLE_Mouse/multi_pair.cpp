@@ -67,14 +67,23 @@ void BondedDevice::swap() {
     new_device.device_num = (device_num == 0) ? 1 : 0;
     memcpy(bd_addr, bonded_devices[new_device.device_num], sizeof(esp_bd_addr_t));
     BOOLEAN is_sc_supported;
-    esp_ble_get_bond_device_info(&bd_addr, new_device.dev_class, new_device.link_key, new_device.key_type, new_device.pin_length, is_sc_supported);
+    esp_ble_get_bond_device_info(&bd_addr, &new_device.dev_class, &new_device.link_key, &new_device.key_type, &new_device.pin_length, &is_sc_supported);
     new_device.sc_support = is_sc_supported;
     sc_support = is_sc_supported;
 
     // save the new device information
     esp_ble_add_bond_device(this->bd_addr, this->dev_class, this->link_key, this->trusted_mask, this->is_trusted, this->key_type, this->io_cap, this->pin_length, this->sc_support);
 
-    this = new_device;
+    // Update the current device parameters with the new device parameters
+    memcpy(this->bd_addr, new_device.bd_addr, sizeof(esp_bd_addr_t));
+    memcpy(this->dev_class, new_device.dev_class, sizeof(this->dev_class));
+    memcpy(this->link_key, new_device.link_key, sizeof(this->link_key));
+    this->trusted_mask = new_device.trusted_mask;
+    this->is_trusted = new_device.is_trusted;
+    this->key_type = new_device.key_type;
+    this->io_cap = new_device.io_cap;
+    this->pin_length = new_device.pin_length;
+    this->sc_support = new_device.sc_support;
 }
 
 void save_bonded_dveices() {
