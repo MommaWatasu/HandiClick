@@ -9,6 +9,9 @@
 #include "esp_pm.h"
 #include "esp_gap_ble_api.h"
 
+#include <nvs_flash.h>
+#include <nvs.h>
+
 // I2C address of BMX055 acceleration sensor
 #define Addr_Accl 0x19  // (JP1,JP2,JP3 = Open)
 // I2C address of BMX055 gyro sensor
@@ -65,7 +68,6 @@ struct MouseEvent {
       uint8_t button;
     } release;
     struct {
-      uint8_t device;
     } switch_device;
   };
 
@@ -688,13 +690,14 @@ void initialize_wheel() {
 void switch_ble_device() {
   if (digitalRead(GPIO_PIN_DEVICE_SWITCH) == HIGH) {
     device_num = 1;
+    ESP_LOGI(LOG_TAG, "Device 1");
   } else {
     device_num = 0;
+    ESP_LOGI(LOG_TAG, "Device 0");
   }
 
   // define event
   MouseEvent event = MouseEvent(MouseEvent::Type::SWITCH);
-  event.switch_device.device = device_num;
   // enqueue the event
   event_queue.push(event);
 
@@ -711,20 +714,44 @@ void initialize_switch() {
   // Load bonded devices from NVS
   load_bonded_devices();
   // Load inactive bond device from NVS
-  inactive_bonded_device.load();
+  ESP_LOGI(LOG_TAG, "Load inactive bond device");
+  if (inactive_bonded_device.load() != ESP_OK) {
+    ESP_LOGI(LOG_TAG, "Failed to load inactive bond device");
+    inactive_bonded_device = EmptyBondedDevice;
+  }
   pinMode(GPIO_PIN_DEVICE_SWITCH, INPUT_PULLUP);
   if (digitalRead(GPIO_PIN_DEVICE_SWITCH) == HIGH) {
     device_num = 1;
+    inactive_bonded_device.device_num = 0;
     ESP_LOGI(LOG_TAG, "Device 1");
   } else {
     device_num = 0;
+    inactive_bonded_device.device_num = 1;
     ESP_LOGI(LOG_TAG, "Device 0");
   }
   int num_load_device = 1;
   esp_ble_bond_dev_t current_bonded_dev_list[1] = {};
+  printf("%d\n", esp_ble_get_bond_device_num());
   esp_ble_get_bond_device_list(&num_load_device, current_bonded_dev_list);
+  printf("%d\n", num_bonded_dev);
+  // show the bonded device
+  for (int i = 0; i < 6; i++) {
+    printf("%02X", bonded_devices[device_num][i]);
+    if (i < 5) {
+      printf(":");
+    }
+  }
+  printf("\n");
+  for (int i = 0; i < 6; i++) {
+    printf("%02X", current_bonded_dev_list[0].bd_addr[i]);
+    if (i < 5) {
+      printf(":");
+    }
+  }
+  printf("\n");
   if (num_bonded_dev != 0) {
     if (memcmp(bonded_devices[device_num], current_bonded_dev_list[0].bd_addr, sizeof(bonded_devices[device_num])) != 0) {
+      ESP_LOGI(LOG_TAG, "Swap");
       inactive_bonded_device.swap();
     }
   }
@@ -755,7 +782,13 @@ extern "C" void app_main()
   motion3d.init(motion2d.default_accel[2]);
   MouseTicker.attach_ms(dt, mouse2d);
 
-  ESP_LOGI(LOG_TAG, "End of the initialization");
+  //initialize nvs
+  esp_err_t ret = nvs_flash_init();
+  if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+      ESP_ERROR_CHECK(nvs_flash_erase());
+      ret = nvs_flash_init();
+  }
+  ESP_ERROR_CHECK(ret);
 
   // Initialize the interruption handler for several GPIO pins
   initialize_clicks();
@@ -769,6 +802,8 @@ extern "C" void app_main()
   pm_config.light_sleep_enable = true; // Enable light sleep
 
   ESP_ERROR_CHECK(esp_pm_configure(&pm_config));
+
+  ESP_LOGI(LOG_TAG, "End of the initialization");
 
   // Initialize BLE Mouse
   bleMouse.begin();
@@ -795,19 +830,17 @@ extern "C" void app_main()
           }
           break;
         case MouseEvent::Type::SWITCH:
-          if (event.switch_device.device == 0) {
-            device_num = 0;
-            ESP_LOGI(LOG_TAG, "Device 0");
-          } else {
-            device_num = 1;
-            ESP_LOGI(LOG_TAG, "Device 1");
-          }
+          ESP_LOGI(LOG_TAG, "Switching device");
+          /*
           if (inactive_bonded_device.device_num == device_num) {
             inactive_bonded_device.swap();
+            inactive_bonded_device.save();
           }
-          if (memcmp(connected_device_addr, bonded_devices[event.switch_device.device], sizeof(connected_device_addr)) != 0) {
+          if (memcmp(connected_device_addr, bonded_devices[device_num], sizeof(connected_device_addr)) != 0) {
             esp_ble_gap_disconnect(connected_device_addr);
           }
+          */
+          
           break;
         default:
           break;

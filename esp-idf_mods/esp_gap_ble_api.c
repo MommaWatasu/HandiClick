@@ -688,8 +688,8 @@ esp_err_t esp_ble_confirm_reply(esp_bd_addr_t bd_addr, bool accept)
 
 
 esp_err_t esp_ble_get_bond_device_info(esp_bd_addr_t *remote_bd_addr,
-        DEV_CLASS *dev_class,
-        LINK_KEY *link_key,
+        UINT8 *dev_class,
+        UINT8 *link_key,
         UINT8 *key_type,
         UINT8 *pin_length,
         BOOLEAN *sc_support)
@@ -741,7 +741,7 @@ esp_err_t esp_ble_remove_bond_device(esp_bd_addr_t bd_addr)
     msg.sig = BTC_SIG_API_CALL;
     msg.pid = BTC_PID_GAP_BLE;
     msg.act = BTC_GAP_BLE_REMOVE_BOND_DEV_EVT;
-    memcpy(arg.add_bond_device.bd_addr, bd_addr, ESP_BD_ADDR_LEN);
+    memcpy(arg.remove_bond_device.bd_addr, bd_addr, ESP_BD_ADDR_LEN);
 
     return (btc_transfer_context(&msg, &arg, sizeof(btc_ble_gap_args_t), NULL, NULL)
             == BT_STATUS_SUCCESS ? ESP_OK : ESP_FAIL);

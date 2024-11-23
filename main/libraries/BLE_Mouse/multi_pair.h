@@ -36,14 +36,14 @@ struct BondedDevice {
     UINT8 sc_support;
 };
 
-const BondedDevice EmptyBondedDevice = BondedDevice{0, {0}, {0}, {0}, 0, false, 0, 0, 0, 0};
+const BondedDevice EmptyBondedDevice = BondedDevice{0, {0}, {0}, {0}, 0, false, 0, ESP_IO_CAP_OUT, 0, 0};
 
 #define MAX_BONDED_DEVICES 2 // Maximum number of bonded devices
-extern int32_t num_bonded_dev;
+extern uint8_t num_bonded_dev;
 extern int device_num;
 extern esp_bd_addr_t bonded_devices[MAX_BONDED_DEVICES];
 extern esp_bd_addr_t connected_device_addr;
 extern BondedDevice inactive_bonded_device;
 
-void save_bonded_dveices();
+void save_bonded_devices();
 void load_bonded_devices();

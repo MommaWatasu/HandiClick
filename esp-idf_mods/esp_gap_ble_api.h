@@ -1887,8 +1887,8 @@ typedef UINT8 DEV_CLASS[DEV_CLASS_LEN];     /* Device class */
 typedef UINT8 *DEV_CLASS_PTR;               /* Pointer to Device class */
 
 esp_err_t esp_ble_get_bond_device_info(esp_bd_addr_t *remote_bd_addr,
-        DEV_CLASS *dev_class,
-        LINK_KEY *link_key,
+        UINT8 *dev_class,
+        UINT8 *link_key,
         UINT8 *key_type,
         UINT8 *pin_length,
         BOOLEAN *sc_support);
