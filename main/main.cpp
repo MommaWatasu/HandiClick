@@ -719,6 +719,13 @@ void initialize_switch() {
     device_num = 0;
     ESP_LOGI(LOG_TAG, "Device 0");
   }
+  int num_load_device = 1;
+  esp_bonded_device_t current_bonded_devices[1] = esp_ble_get_bond_device_list(&num_load_device, &current_bonded_devices);
+  if (num_bonded_devices != 0) {
+    if (memcmp(bonded_devices[device_num], current_bonded_devices[0].bd_addr, sizeof(bonded_devices[device_num])) != 0) {
+      inactive_bonded_device.swap();
+    }
+  }
   // set the interruption handler for device switch
   attachInterrupt(GPIO_PIN_DEVICE_SWITCH, switch_ble_device, CHANGE);
 }
@@ -787,9 +794,14 @@ extern "C" void app_main()
           break;
         case MouseEvent::Type::SWITCH:
           if (event.switch_device.device == 0) {
+            device_num = 0;
             ESP_LOGI(LOG_TAG, "Device 0");
           } else {
+            device_num = 1;
             ESP_LOGI(LOG_TAG, "Device 1");
+          }
+          if (inactive_bonded_device.device_num == device_num) {
+            inactive_bonded_device.swap();
           }
           if (memcmp(connected_device_addr, bonded_devices[event.switch_device.device].bd_addr, sizeof(connected_device_addr)) != 0) {
             esp_ble_gap_disconnect(connected_device_addr);

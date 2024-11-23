@@ -65,7 +65,7 @@ void BondedDevice::swap() {
     // create new bonded device structure to store the old information
     BondedDevice new_device = EmptyBondedDevice;
     new_device.device_num = (device_num == 0) ? 1 : 0;
-    memcpy(bd_addr, bonded_devices[new_device.device_num].bd_addr, sizeof(esp_bd_addr_t));
+    memcpy(bd_addr, bonded_devices[new_device.device_num], sizeof(esp_bd_addr_t));
     BOOLEAN is_sc_supported;
     esp_ble_get_bond_device_info(&bd_addr, new_device.dev_class, new_device.link_key, new_device.key_type, new_device.pin_length, is_sc_supported);
     new_device.sc_support = is_sc_supported;
