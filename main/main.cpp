@@ -29,12 +29,13 @@
 #define GPIO_PIN_ROTARY_A 5
 // Rotary Encoder 2
 #define GPIO_PIN_ROTARY_B 18
-
-#define MAX_BONDED_DEVICES 2 // Maximum number of bonded devices
+// Maximum number of bonded devices
+#define MAX_BONDED_DEVICES 2
 
 TimerHandle_t timer_left = NULL;
 TimerHandle_t timer_right = NULL;
 TimerHandle_t timer_wheel = NULL;
+TimerHandle_t timer_swipe = NULL;
 // time in ms to trigger the watchdog
 const int wdtTimeout = 10;
 const int dt = 2; // time in ms to update 2d mouse
@@ -48,6 +49,7 @@ struct MouseEvent {
     MOVE,
     PRESS,
     RELEASE,
+    SWIPE
   };
 
   Type type;
@@ -63,6 +65,9 @@ struct MouseEvent {
     struct {
       uint8_t button;
     } release;
+    struct {
+      bool forward;
+    } swipe;
   };
 
   MouseEvent() : type(Type::NONE) {}
@@ -409,7 +414,11 @@ struct Motion3D {
   float pitch;
   float roll;
   float yaw;
+  bool gravity_free_accel_enabled;
+  float gravity_free_accel[3];
   float default_posture[3];
+
+  const float GRAVITY = 9.80665;
 
   Motion3D() {
     filter.begin(30);
@@ -418,11 +427,12 @@ struct Motion3D {
     pitch = 0.0;
     roll = 0.0;
     yaw = 0.0;
+    gravity_free_accel_enabled = true;
   }
 
   void init(float z_accel) {
     bmx.update();
-    update_madgewick(bmx.accel.data(), bmx.gyro.data(), bmx.mag.data());
+    update(bmx.accel.data(), bmx.gyro.data(), bmx.mag.data());
     default_z_accel = z_accel;
     avg_z_accel = bmx.accel[2];
     default_posture[0] = pitch;
@@ -430,7 +440,12 @@ struct Motion3D {
     default_posture[2] = yaw;
   }
 
-  void update_madgewick(float accel[3], float gyro[3], float mag[3]) {
+  // convert degrees to radians
+  float degToRad(double degrees) {
+    return degrees * M_PI / 180.0;
+  }
+
+  void update(float accel[3], float gyro[3], float mag[3]) {
     avg_z_accel = (avg_z_accel + accel[2]) / 2;
 
     filter.update(
@@ -441,6 +456,14 @@ struct Motion3D {
     pitch = filter.getPitch();
     roll = filter.getRoll();
     yaw = filter.getYaw();
+    // calculate the graivity vector
+    float gx = GRAVITY * (-std::sin(degToRad(pitch)));
+    float gy = GRAVITY * (std::sin(degToRad(roll)) * std::cos(degToRad(pitch)));
+    float gz = GRAVITY * (std::cos(degToRad(roll)) * std::cos(degToRad(pitch)));
+    // calculate gravity free acceleration
+    gravity_free_accel[0] = accel[0] - gx;
+    gravity_free_accel[1] = accel[1] - gy;
+    gravity_free_accel[2] = accel[2] - gz;
   }
 
   bool check_mode() {
@@ -472,6 +495,16 @@ struct Motion3D {
 
   signed char dy() {
     return -std::round(convert_range(roll));
+  }
+
+  signed char swipe() {
+    if (gravity_free_accel[0] > 10) {
+      return -1;
+    } else if (gravity_free_accel[0] < -10) {
+      return 1;
+    } else {
+      return 0;
+    }
   }
 };
 
@@ -528,7 +561,7 @@ void mouse3d() {
   bool mode;
 
   bmx.update();
-  motion3d.update_madgewick(bmx.accel.data(), bmx.gyro.data(), bmx.mag.data());
+  motion3d.update(bmx.accel.data(), bmx.gyro.data(), bmx.mag.data());
 
   mode = motion3d.check_mode();
   if (!mode) {
@@ -551,7 +584,31 @@ void mouse3d() {
       // enqueue the event
       event_queue.push(event);
     }
+    if (motion3d.gravity_free_accel_enabled) {
+      if (motion3d.swipe() == -1) {
+        // define event
+        MouseEvent event = MouseEvent(MouseEvent::Type::SWIPE);
+        event.swipe.forward = false;
+        // enqueue the event
+        event_queue.push(event);
+        motion3d.gravity_free_accel_enabled = false;
+        xTimerStart(timer_swipe, 0);
+      } else if (motion3d.swipe() == 1) {
+        // define event
+        MouseEvent event = MouseEvent(MouseEvent::Type::SWIPE);
+        event.swipe.forward = true;
+        // enqueue the event
+        event_queue.push(event);
+        motion3d.gravity_free_accel_enabled = false;
+        xTimerStart(timer_swipe, 0);
+      }
+    }
   }
+}
+
+void enable_swipe(TimerHandle_t _) {
+  motion3d.gravity_free_accel_enabled = true;
+  xTimerStop(timer_swipe, 0);
 }
 
 void check_wakeup() {
@@ -694,6 +751,7 @@ extern "C" void app_main()
   timer_left = xTimerCreate("TimerLeft", pdMS_TO_TICKS(wdtTimeout), pdFALSE, NULL, enable_left_click);
   timer_right = xTimerCreate("TimerRight", pdMS_TO_TICKS(wdtTimeout), pdFALSE, NULL, enable_right_click);
   timer_wheel = xTimerCreate("TimerWheel", pdMS_TO_TICKS(2), pdFALSE, NULL, enable_wheel);
+  timer_swipe = xTimerCreate("TimerSwipe", pdMS_TO_TICKS(500), pdFALSE, NULL, enable_swipe);
 
   // Initialize BMX055
   bmx.init();
@@ -747,6 +805,16 @@ extern "C" void app_main()
         case MouseEvent::Type::RELEASE:
           if (bleMouse.isConnected()) {
             bleMouse.release(event.release.button);
+          }
+          break;
+        case MouseEvent::Type::SWIPE:
+          if (bleMouse.isConnected()) {
+            // if the forward is true, send forward swipe event
+            if (event.swipe.forward) {
+              bleMouse.click(MOUSE_FORWARD);
+            } else {
+              bleMouse.click(MOUSE_BACK);
+            }
           }
           break;
         default:
