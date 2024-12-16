@@ -6,7 +6,6 @@
 #include <BLEServer.h>
 #include "BLE2902.h"
 #include "BLECharacteristic.h"
-#include "multi_pair.h"
 
 class BleConnectionStatus : public BLEServerCallbacks
 {

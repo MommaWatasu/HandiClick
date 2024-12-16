@@ -29,15 +29,12 @@
 #define GPIO_PIN_ROTARY_A 5
 // Rotary Encoder 2
 #define GPIO_PIN_ROTARY_B 18
-// BLE Device Switch
-#define GPIO_PIN_DEVICE_SWITCH 13
 
 #define MAX_BONDED_DEVICES 2 // Maximum number of bonded devices
 
 TimerHandle_t timer_left = NULL;
 TimerHandle_t timer_right = NULL;
 TimerHandle_t timer_wheel = NULL;
-TimerHandle_t timer_switch = NULL;
 // time in ms to trigger the watchdog
 const int wdtTimeout = 10;
 const int dt = 2; // time in ms to update 2d mouse
@@ -51,7 +48,6 @@ struct MouseEvent {
     MOVE,
     PRESS,
     RELEASE,
-    SWITCH
   };
 
   Type type;
@@ -67,8 +63,6 @@ struct MouseEvent {
     struct {
       uint8_t button;
     } release;
-    struct {
-    } switch_device;
   };
 
   MouseEvent() : type(Type::NONE) {}
@@ -687,78 +681,6 @@ void initialize_wheel() {
   attachInterrupt(GPIO_PIN_ROTARY_B, update_wheel, CHANGE);
 }
 
-void switch_ble_device() {
-  if (digitalRead(GPIO_PIN_DEVICE_SWITCH) == HIGH) {
-    device_num = 1;
-    ESP_LOGI(LOG_TAG, "Device 1");
-  } else {
-    device_num = 0;
-    ESP_LOGI(LOG_TAG, "Device 0");
-  }
-
-  // define event
-  MouseEvent event = MouseEvent(MouseEvent::Type::SWITCH);
-  // enqueue the event
-  event_queue.push(event);
-
-  detachInterrupt(GPIO_PIN_DEVICE_SWITCH);
-  xTimerStart(timer_switch, 0);
-}
-
-void enable_switch(TimerHandle_t _) {
-  xTimerStop(timer_switch, 0);
-}
-
-// initialize the device switch
-void initialize_switch() {
-  // Load bonded devices from NVS
-  load_bonded_devices();
-  // Load inactive bond device from NVS
-  ESP_LOGI(LOG_TAG, "Load inactive bond device");
-  if (inactive_bonded_device.load() != ESP_OK) {
-    ESP_LOGI(LOG_TAG, "Failed to load inactive bond device");
-    inactive_bonded_device = EmptyBondedDevice;
-  }
-  pinMode(GPIO_PIN_DEVICE_SWITCH, INPUT_PULLUP);
-  if (digitalRead(GPIO_PIN_DEVICE_SWITCH) == HIGH) {
-    device_num = 1;
-    inactive_bonded_device.device_num = 0;
-    ESP_LOGI(LOG_TAG, "Device 1");
-  } else {
-    device_num = 0;
-    inactive_bonded_device.device_num = 1;
-    ESP_LOGI(LOG_TAG, "Device 0");
-  }
-  int num_load_device = 1;
-  esp_ble_bond_dev_t current_bonded_dev_list[1] = {};
-  printf("%d\n", esp_ble_get_bond_device_num());
-  esp_ble_get_bond_device_list(&num_load_device, current_bonded_dev_list);
-  printf("%d\n", num_bonded_dev);
-  // show the bonded device
-  for (int i = 0; i < 6; i++) {
-    printf("%02X", bonded_devices[device_num][i]);
-    if (i < 5) {
-      printf(":");
-    }
-  }
-  printf("\n");
-  for (int i = 0; i < 6; i++) {
-    printf("%02X", current_bonded_dev_list[0].bd_addr[i]);
-    if (i < 5) {
-      printf(":");
-    }
-  }
-  printf("\n");
-  if (num_bonded_dev != 0) {
-    if (memcmp(bonded_devices[device_num], current_bonded_dev_list[0].bd_addr, sizeof(bonded_devices[device_num])) != 0) {
-      ESP_LOGI(LOG_TAG, "Swap");
-      inactive_bonded_device.swap();
-    }
-  }
-  // set the interruption handler for device switch
-  attachInterrupt(GPIO_PIN_DEVICE_SWITCH, switch_ble_device, CHANGE);
-}
-
 extern "C" void app_main()
 {
   // Initialize Arduino
@@ -772,7 +694,6 @@ extern "C" void app_main()
   timer_left = xTimerCreate("TimerLeft", pdMS_TO_TICKS(wdtTimeout), pdFALSE, NULL, enable_left_click);
   timer_right = xTimerCreate("TimerRight", pdMS_TO_TICKS(wdtTimeout), pdFALSE, NULL, enable_right_click);
   timer_wheel = xTimerCreate("TimerWheel", pdMS_TO_TICKS(2), pdFALSE, NULL, enable_wheel);
-  timer_switch = xTimerCreate("TimerSwitch", pdMS_TO_TICKS(wdtTimeout), pdFALSE, NULL, enable_switch);
 
   // Initialize BMX055
   bmx.init();
@@ -793,7 +714,6 @@ extern "C" void app_main()
   // Initialize the interruption handler for several GPIO pins
   initialize_clicks();
   initialize_wheel();
-  initialize_switch();
 
   // Configure power management to enable automatic light sleep
   esp_pm_config_t pm_config;
@@ -828,19 +748,6 @@ extern "C" void app_main()
           if (bleMouse.isConnected()) {
             bleMouse.release(event.release.button);
           }
-          break;
-        case MouseEvent::Type::SWITCH:
-          ESP_LOGI(LOG_TAG, "Switching device");
-          /*
-          if (inactive_bonded_device.device_num == device_num) {
-            inactive_bonded_device.swap();
-            inactive_bonded_device.save();
-          }
-          if (memcmp(connected_device_addr, bonded_devices[device_num], sizeof(connected_device_addr)) != 0) {
-            esp_ble_gap_disconnect(connected_device_addr);
-          }
-          */
-          
           break;
         default:
           break;
