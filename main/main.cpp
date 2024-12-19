@@ -29,6 +29,8 @@
 #define GPIO_PIN_ROTARY_A 5
 // Rotary Encoder 2
 #define GPIO_PIN_ROTARY_B 18
+// Motion Lock
+#define GPIO_PIN_LOCK 33
 // Maximum number of bonded devices
 #define MAX_BONDED_DEVICES 2
 
@@ -36,6 +38,7 @@ TimerHandle_t timer_left = NULL;
 TimerHandle_t timer_right = NULL;
 TimerHandle_t timer_wheel = NULL;
 TimerHandle_t timer_swipe = NULL;
+TimerHandle_t timer_lock = NULL;
 // time in ms to trigger the watchdog
 const int wdtTimeout = 10;
 const int dt = 2; // time in ms to update 2d mouse
@@ -514,6 +517,7 @@ RotaryEncoder encoder(GPIO_PIN_ROTARY_A, GPIO_PIN_ROTARY_B, RotaryEncoder::Latch
 int pos = 0;
 BleMouse bleMouse("HandiClick", "GateHorse", 100);
 Ticker MouseTicker;
+bool motion_enabled = true;
 
 void mouse3d();
 void check_wakeup();
@@ -545,13 +549,15 @@ void mouse2d() {
       }
     } else {
       sleep_mode_count = 0;
-      // define event
-      MouseEvent event = MouseEvent(MouseEvent::Type::MOVE);
-      event.move.dx = dx;
-      event.move.dy = dy;
-      event.move.wheel = 0;
-      // enqueue the event
-      event_queue.push(event);
+      if (motion_enabled) {
+        // define event
+        MouseEvent event = MouseEvent(MouseEvent::Type::MOVE);
+        event.move.dx = dx;
+        event.move.dy = dy;
+        event.move.wheel = 0;
+        // enqueue the event
+        event_queue.push(event);
+      }
     }
   }
 }
@@ -575,7 +581,7 @@ void mouse3d() {
   if (bleMouse.isConnected()) {
     dx = motion3d.dx();
     dy = motion3d.dy();
-    if (dx != 0 || dy != 0) {
+    if ((dx != 0 || dy != 0) && motion_enabled) {
       // define event
       MouseEvent event = MouseEvent(MouseEvent::Type::MOVE);
       event.move.dx = dx;
@@ -705,6 +711,22 @@ void initialize_clicks() {
   attachInterrupt(GPIO_PIN_RIGHT, right_click, RISING);
 }
 
+void change_motion_state() {
+  motion_enabled = !motion_enabled;
+  detachInterrupt(GPIO_PIN_LOCK);
+  xTimerStart(timer_lock, 0);
+}
+
+void enable_lock_switch(TimerHandle_t _) {
+  attachInterrupt(GPIO_PIN_LOCK, change_motion_state, FALLING);
+  xTimerStop(timer_lock, 0);
+}
+
+void initialize_lock_switch() {
+  pinMode(GPIO_PIN_LOCK, INPUT_PULLUP);
+  attachInterrupt(GPIO_PIN_LOCK, change_motion_state, FALLING);
+}
+
 /*
 // Here is the implementation for Wheel
 */
@@ -716,6 +738,8 @@ void update_wheel() {
     if (bleMouse.isConnected()) {
       // define event
       MouseEvent event = MouseEvent(MouseEvent::Type::MOVE);
+      event.move.dx = 0;
+      event.move.dy = 0;
       event.move.wheel = -char(encoder.getDirection()) * 2;
       // enqueue the event
       event_queue.push(event);
@@ -752,6 +776,7 @@ extern "C" void app_main()
   timer_right = xTimerCreate("TimerRight", pdMS_TO_TICKS(wdtTimeout), pdFALSE, NULL, enable_right_click);
   timer_wheel = xTimerCreate("TimerWheel", pdMS_TO_TICKS(2), pdFALSE, NULL, enable_wheel);
   timer_swipe = xTimerCreate("TimerSwipe", pdMS_TO_TICKS(500), pdFALSE, NULL, enable_swipe);
+  timer_lock = xTimerCreate("TimerLock", pdMS_TO_TICKS(wdtTimeout), pdFALSE, NULL, enable_lock_switch);
 
   // Initialize BMX055
   bmx.init();
@@ -772,6 +797,7 @@ extern "C" void app_main()
   // Initialize the interruption handler for several GPIO pins
   initialize_clicks();
   initialize_wheel();
+  initialize_lock_switch();
 
   // Configure power management to enable automatic light sleep
   esp_pm_config_t pm_config;
